@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# this tool requires gzip.
+
+gzip -k -d -f gpt.img.gz
+gzip -k -d -f mbr.img.gz

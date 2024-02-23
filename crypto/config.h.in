@@ -1,0 +1,6 @@
+#ifndef CRYPTO_CONFIG_H__
+#define CRYPTO_CONFIG_H__
+
+#cmakedefine ZLIB_FOUND
+
+#endif

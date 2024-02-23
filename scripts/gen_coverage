@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -e
+
+mkdir -p coverage
+cd coverage
+
+gcovr --html-details coverage.html -r ..
