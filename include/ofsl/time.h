@@ -3,51 +3,33 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+typedef struct {
+    time_t second;
+    uint32_t nsec;
+} OFSL_Time;
+
 /**
- * @brief Time Struct
- * field    value range     description
- * year     0 - 4096        Year
- * month    1 - 12          Month
- * day      1 - 31          Day of Month
- * hour     0 - 23          Hour (24)
- * minute   0 - 60          Minute
- * second   0 - 60          Second
- * nsec10   0 - 100,000,000 Nanoseconds in Second Divided by 10
+ * @brief Time Delta Struct
  */
-typedef struct ofsl_time {
-    uint16_t year : 12;
-    uint16_t month : 4;
+typedef struct {
+    time_t dsecond;
+    int32_t dnsec;
+} OFSL_TimeDelta;
 
-    uint16_t day : 5;
-    uint16_t hour : 5;
-    uint16_t minute : 6;
+int ofsl_time_getlocal(OFSL_Time* tm);
+int ofsl_time_getutc(OFSL_Time* tm);
 
-    uint8_t second : 6;
-    uint8_t : 1;
-    uint8_t valid : 1;
+void ofsl_time_calcdiff(OFSL_Time* fstm, const OFSL_TimeDelta* tdelta);
+void ofsl_time_getdiff(OFSL_TimeDelta* tdelta, const OFSL_Time* ref, const OFSL_Time* tm);
 
-    uint32_t nsec10;
-} ofsl_time_t;
-
-void ofsl_gettime(ofsl_time_t* time);
-
-size_t ofsl_strffstime(char* sbuf, size_t sbufsz, const char* fmt, const ofsl_time_t* time);
-
-void ofsl_calcyear(ofsl_time_t* time, int ydiff);
-void ofsl_calcmonth(ofsl_time_t* time, int mdiff);
-void ofsl_calcday(ofsl_time_t* time, int ddiff);
-void ofsl_calchour(ofsl_time_t* time, int hdiff);
-void ofsl_calcminute(ofsl_time_t* time, int mdiff);
-void ofsl_calcsecond(ofsl_time_t* time, int sdiff);
-void ofsl_calcnsec(ofsl_time_t* time, int nsdiff);
-
-int ofsl_validate(ofsl_time_t* time);
-int ofsl_validate_const(const ofsl_time_t* time);
+int ofsl_time_getstdctm(struct tm* tm, const OFSL_Time* fstm);
+void ofsl_time_fromstdctm(OFSL_Time* fstm, struct tm* tm);
 
 #ifdef __cplusplus
 };

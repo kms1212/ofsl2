@@ -11,9 +11,9 @@ extern "C" {
 
 typedef uint64_t lba_t;
 
-typedef struct ofsl_drive_info {
-    uint16_t    bytes_per_sector;
-    size_t      sector_count;
+typedef struct {
+    uint16_t    sector_size;
+    lba_t       lba_max;
     uint16_t    readonly : 1;
     uint16_t    : 15;
 } OFSL_DriveInfo;
@@ -22,7 +22,7 @@ struct ofsl_drive_ops;
 
 typedef struct ofsl_drive {
     const struct ofsl_drive_ops* ops;
-    struct ofsl_drive_info drvinfo;
+    OFSL_DriveInfo drvinfo;
 } OFSL_Drive;
 
 struct ofsl_drive_ops {

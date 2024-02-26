@@ -1,9 +1,9 @@
-#include <ofsl/ptbl/gpt.h>
+#include <ofsl/partition/gpt.h>
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "ptbl/gpt/internal.h"
+#include "partition/gpt/internal.h"
 #include "crypto/crc32.h"
 
 struct ptbl_gpt {
@@ -16,14 +16,11 @@ struct ptbl_gpt {
     uint32_t part_entry_count;
 };
 
-struct pinfo_gpt {
-    OFSL_PartitionInfo pinfo;
+struct part_gpt {
+    OFSL_Partition part;
     uint32_t idx;
-    lba_t lba_start;
-    lba_t lba_end;
-    size_t sector_count;
     int valid;
-    char name[54];
+    char name[36];
 };
 
 static const char* error_str_list[] = {
@@ -35,9 +32,9 @@ static struct ptbl_gpt* check_ptbl(OFSL_PartitionTable* pt_opaque)
     return (struct ptbl_gpt*)pt_opaque;
 }
 
-static struct pinfo_gpt* check_pinfo(OFSL_PartitionInfo* pinfo_opaque)
+static struct part_gpt* check_part(OFSL_Partition* pinfo_opaque)
 {
-    return (struct pinfo_gpt*)pinfo_opaque;
+    return (struct part_gpt*)pinfo_opaque;
 }
 
 static const char* get_error_string(OFSL_PartitionTable* pt_opaque)
@@ -59,39 +56,39 @@ static void _delete(OFSL_PartitionTable* pt)
     free(pt);
 }
 
-static OFSL_PartitionInfo* list_start(OFSL_PartitionTable* pt_opaque)
+static OFSL_Partition* list_start(OFSL_PartitionTable* pt_opaque)
 {
     struct ptbl_gpt* pt = check_ptbl(pt_opaque);
     if (!pt) {
         return NULL;
     }
 
-    struct pinfo_gpt* pinfo = malloc(sizeof(struct pinfo_gpt));
-    pinfo->pinfo.ops = pt->ptbl.ops;
-    pinfo->pinfo.pt = (OFSL_PartitionTable*)pt;
-    pinfo->valid = 0;
-    return (OFSL_PartitionInfo*)pinfo;
+    struct part_gpt* part = malloc(sizeof(struct part_gpt));
+    part->part.ops = pt->ptbl.ops;
+    part->part.pt = (OFSL_PartitionTable*)pt;
+    part->valid = 0;
+    return (OFSL_Partition*)part;
 }
 
-static int list_next(OFSL_PartitionInfo* pinfo_opaque)
+static int list_next(OFSL_Partition* part_opaque)
 {
-    struct pinfo_gpt* pinfo = check_pinfo(pinfo_opaque);
-    if (!pinfo) {
+    struct part_gpt* part = check_part(part_opaque);
+    if (!part) {
         return 1;
-    } else if (!pinfo->valid) {
-        pinfo->idx = 0;
+    } else if (!part->valid) {
+        part->idx = 0;
     }
 
-    struct ptbl_gpt* pt = check_ptbl(pinfo->pinfo.pt);
+    struct ptbl_gpt* pt = check_ptbl(part->part.pt);
     if (!pt) {
         return 1;
-    } else if (pinfo->idx >= pt->part_entry_count) {
+    } else if (part->idx >= pt->part_entry_count) {
         return 1;
     }
 
     uint8_t sector_buf[512];
-    ofsl_drive_read_sector(pt->drv, sector_buf, pt->lba_part_entry_start + (pinfo->idx / 4), sizeof(sector_buf), 1);
-    struct gpt_part_entry* pent = &((struct gpt_part_entry*)sector_buf)[pinfo->idx % 4];
+    ofsl_drive_read_sector(pt->drv, sector_buf, pt->lba_part_entry_start + (part->idx / 4), sizeof(sector_buf), 1);
+    struct gpt_part_entry* pent = &((struct gpt_part_entry*)sector_buf)[part->idx % 4];
 
     uint16_t guid_sum = 0;
     for (int i = 0; i < 16; i++) {
@@ -101,54 +98,25 @@ static int list_next(OFSL_PartitionInfo* pinfo_opaque)
         return 1;
     }
 
-    pinfo->lba_start = pent->lba_start;
-    pinfo->lba_end = pent->lba_end;
-    pinfo->valid = 1;
+    part->part.lba_start = pent->lba_start;
+    part->part.lba_end = pent->lba_end;
+    part->part.part_name = part->name;
+    part->valid = 1;
     for (int i = 0; i < 36; i++) {
-        pinfo->name[i] = pent->name[i];
+        part->name[i] = pent->name[i];
     }
 
-    pinfo->idx++;
+    part->idx++;
 
     return 0;
 }
 
-static void list_end(OFSL_PartitionInfo* pinfo)
+static void list_end(OFSL_Partition* pinfo)
 {
     free(pinfo);
 }
 
-static lba_t get_part_lba_start(OFSL_PartitionInfo* pinfo_opaque)
-{
-    struct pinfo_gpt* pinfo = check_pinfo(pinfo_opaque);
-    if (!pinfo || !pinfo->valid) {
-        return 0;
-    }
-
-    return pinfo->lba_start;
-}
-
-static lba_t get_part_lba_end(OFSL_PartitionInfo* pinfo_opaque)
-{
-    struct pinfo_gpt* pinfo = check_pinfo(pinfo_opaque);
-    if (!pinfo || !pinfo->valid) {
-        return 0;
-    }
-
-    return pinfo->lba_end;
-}
-
-static const char* get_part_name(OFSL_PartitionInfo* pinfo_opaque)
-{
-    struct pinfo_gpt* pinfo = check_pinfo(pinfo_opaque);
-    if (!pinfo || !pinfo->valid) {
-        return NULL;
-    }
-
-    return pinfo->name;
-}
-
-OFSL_PartitionTable* ofsl_create_ptbl_gpt(OFSL_Drive* drv)
+OFSL_PartitionTable* ofsl_ptbl_gpt_create(OFSL_Drive* drv)
 {
     static const struct ofsl_ptbl_ops ptops = {
         .get_error_string = get_error_string,
@@ -156,9 +124,6 @@ OFSL_PartitionTable* ofsl_create_ptbl_gpt(OFSL_Drive* drv)
         .list_start = list_start,
         .list_next = list_next,
         .list_end = list_end,
-        .get_part_lba_start = get_part_lba_start,
-        .get_part_lba_end = get_part_lba_end,
-        .get_part_name = get_part_name,
     };
     
     /* verify MBR */

@@ -16,7 +16,7 @@ static int update_info(OFSL_Drive* drv_opaque)
 static ssize_t read_sector(OFSL_Drive* drv_opaque, void* buf, lba_t lba, size_t sector_size, size_t cnt)
 {
     struct drive_rawimage* drv = (struct drive_rawimage*)drv_opaque;
-    const uint16_t img_sector_size = drv->drv.drvinfo.bytes_per_sector;
+    const uint16_t img_sector_size = drv->drv.drvinfo.sector_size;
 
     if (sector_size > img_sector_size) {
         return 0;
@@ -40,7 +40,7 @@ static ssize_t read_sector(OFSL_Drive* drv_opaque, void* buf, lba_t lba, size_t 
 static ssize_t write_sector(OFSL_Drive* drv_opaque, const void* buf, lba_t lba, size_t sector_size, size_t cnt)
 {
     struct drive_rawimage* drv = (struct drive_rawimage*)drv_opaque;
-    const uint16_t img_sector_size = drv->drv.drvinfo.bytes_per_sector;
+    const uint16_t img_sector_size = drv->drv.drvinfo.sector_size;
 
     if (sector_size > img_sector_size) {
         return 0;
@@ -69,7 +69,7 @@ static void _delete(OFSL_Drive* drv_opaque)
     free(drv);
 }
 
-OFSL_Drive* ofsl_create_rawimage_drive(const char* name, int readonly, size_t sector_size, size_t sector_count)
+OFSL_Drive* ofsl_drive_rawimage_create(const char* name, int readonly, size_t sector_size)
 {
     static const struct ofsl_drive_ops drvops = {
         ._delete = _delete,
@@ -85,16 +85,17 @@ OFSL_Drive* ofsl_create_rawimage_drive(const char* name, int readonly, size_t se
 
     fseek(fp, 0, SEEK_END);
     size_t filesz = ftell(fp);
-
-    if (filesz != sector_size * sector_count) {
+    if (filesz % sector_size != 0) {
         fclose(fp);
         return NULL;
     }
 
+    lba_t lba_max = filesz / sector_size - 1;
+
     struct drive_rawimage* drv = malloc(sizeof(struct drive_rawimage));
     drv->drv.ops = &drvops;
-    drv->drv.drvinfo.bytes_per_sector = sector_size;
-    drv->drv.drvinfo.sector_count = sector_count;
+    drv->drv.drvinfo.sector_size = sector_size;
+    drv->drv.drvinfo.lba_max = lba_max;
     drv->drv.drvinfo.readonly = readonly;
     drv->fp = fp;
 

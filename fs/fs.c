@@ -1,6 +1,10 @@
 #include <ofsl/fs/fs.h>
 
+#include <string.h>
+
 #include <ofsl/fs/errmsg.h>
+
+#include "fs/internal.h"
 
 static const char* error_str_list[] = {
     "Operation successfully finished",
@@ -22,4 +26,9 @@ const char* ofsl_fs_get_error_string(OFSL_FileSystem* fs)
     } else {
         return fs->ops->get_error_string(fs);
     }
+}
+
+void _ofsl_fs_mntinfo_init(OFSL_MountInfo* mntinfo)
+{
+    memset(mntinfo, 0, sizeof(*mntinfo));
 }

@@ -1,5 +1,5 @@
-#ifndef OFSL_PTBL_ERRMSG_H__
-#define OFSL_PTBL_ERRMSG_H__
+#ifndef OFSL_PARTITION_ERRMSG_H__
+#define OFSL_PARTITION_ERRMSG_H__
 
 #ifdef __cplusplus
 extern "C" {

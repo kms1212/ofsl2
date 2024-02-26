@@ -1,6 +1,6 @@
-#include <ofsl/ptbl/ptbl.h>
+#include <ofsl/partition/partition.h>
 
-#include <ofsl/ptbl/errmsg.h>
+#include <ofsl/partition/errmsg.h>
 
 static const char* error_str_list[] = {
     "Operation successfully finished",
@@ -18,4 +18,14 @@ const char* ofsl_ptbl_get_error_string(OFSL_PartitionTable* pt)
     } else {
         return pt->ops->get_error_string(pt);
     }
+}
+
+int ofsl_partition_from_drive(OFSL_Partition* part, OFSL_Drive* drive)
+{
+    part->drv = drive;
+    part->lba_start = 0;
+    part->lba_end = drive->drvinfo.lba_max;
+    part->part_name = NULL;
+
+    return 0;
 }

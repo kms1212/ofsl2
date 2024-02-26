@@ -7,6 +7,7 @@
 
 #include <ofsl/drive/rawimage.h>
 #include <ofsl/fs/fat.h>
+#include <ofsl/time.h>
 
 #include "md5.h"
 
@@ -19,10 +20,13 @@ const char* imgtree_path;
 
 static int init_fat12_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE, 2048);
+    drive = ofsl_drive_rawimage_create("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    fat = ofsl_create_fs_fat(drive, 0);
+    OFSL_Partition part;
+    ofsl_partition_from_drive(&part, drive);
+
+    fat = ofsl_fs_fat_create(&part);
     assert(fat);
 
     fsname_expected = "FAT12";
@@ -32,10 +36,13 @@ static int init_fat12_suite(void)
 
 static int init_fat12_cl_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE, 2048);
+    drive = ofsl_drive_rawimage_create("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    fat = ofsl_create_fs_fat(drive, 0);
+    OFSL_Partition part;
+    ofsl_partition_from_drive(&part, drive);
+
+    fat = ofsl_fs_fat_create(&part);
     assert(fat);
 
     struct ofsl_fs_fat_option* options = ofsl_fs_fat_get_option(fat);
@@ -50,10 +57,13 @@ static int init_fat12_cl_suite(void)
 
 static int init_fat12_clu_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE, 2048);
+    drive = ofsl_drive_rawimage_create("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    fat = ofsl_create_fs_fat(drive, 0);
+    OFSL_Partition part;
+    ofsl_partition_from_drive(&part, drive);
+
+    fat = ofsl_fs_fat_create(&part);
     assert(fat);
 
     struct ofsl_fs_fat_option* options = ofsl_fs_fat_get_option(fat);
@@ -67,10 +77,13 @@ static int init_fat12_clu_suite(void)
 
 static int init_fat12_csl_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE, 2048);
+    drive = ofsl_drive_rawimage_create("tests/data/fat/fat12.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    fat = ofsl_create_fs_fat(drive, 0);
+    OFSL_Partition part;
+    ofsl_partition_from_drive(&part, drive);
+
+    fat = ofsl_fs_fat_create(&part);
     assert(fat);
 
     struct ofsl_fs_fat_option* options = ofsl_fs_fat_get_option(fat);
@@ -85,10 +98,13 @@ static int init_fat12_csl_suite(void)
 
 static int init_fat16_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/fat/fat16.img", 0, TEST_SECTOR_SIZE, 32768);
+    drive = ofsl_drive_rawimage_create("tests/data/fat/fat16.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    fat = ofsl_create_fs_fat(drive, 0);
+    OFSL_Partition part;
+    ofsl_partition_from_drive(&part, drive);
+
+    fat = ofsl_fs_fat_create(&part);
     assert(fat);
 
     fsname_expected = "FAT16";
@@ -98,10 +114,13 @@ static int init_fat16_suite(void)
 
 static int init_fat32_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/fat/fat32.img", 0, TEST_SECTOR_SIZE, 131072);
+    drive = ofsl_drive_rawimage_create("tests/data/fat/fat32.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    fat = ofsl_create_fs_fat(drive, 0);
+    OFSL_Partition part;
+    ofsl_partition_from_drive(&part, drive);
+
+    fat = ofsl_fs_fat_create(&part);
     assert(fat);
 
     fsname_expected = "FAT32";
@@ -119,9 +138,11 @@ static void test_unmount(void)
     CU_ASSERT_FALSE(ofsl_fs_unmount(fat));
 }
 
-static void test_get_filesystem_name(void)
+static void test_get_mount_info(void)
 {
-    CU_ASSERT_STRING_EQUAL(ofsl_fs_get_filesystem_name(fat), fsname_expected);
+    OFSL_MountInfo mntinfo;
+    CU_ASSERT_FALSE_FATAL(ofsl_fs_get_mount_info(fat, &mntinfo));
+    CU_ASSERT_STRING_EQUAL(mntinfo.fs_name, fsname_expected);
 }
 
 static void test_no_such_entry(void)
@@ -141,7 +162,7 @@ static void test_dir_list(void)
 
     FILE* imgtree = fopen(imgtree_path, "r");
 
-    OFSL_FileInfo* finfo = ofsl_dir_list_start(rootdir);
+    OFSL_DirectoryIterator* it = ofsl_dir_iter_start(rootdir);
 
     char line_buf[512];
     char fname_buf[384];
@@ -154,56 +175,59 @@ static void test_dir_list(void)
                     break;
                 case '$': {
                     if (sscanf(line_buf, "$ %383s\n", fname_buf) == 1) {
-                        CU_ASSERT_TRUE_FATAL(ofsl_dir_list_next(finfo));
-                        ofsl_dir_list_end(finfo);
+                        CU_ASSERT_TRUE_FATAL(ofsl_dir_iter_next(it));
+                        ofsl_dir_iter_end(it);
                         if (subdir) {
                             ofsl_dir_close(subdir);
                         }
                         subdir = ofsl_dir_open(rootdir, fname_buf);
                         CU_ASSERT_PTR_NOT_NULL_FATAL(subdir);
-                        finfo = ofsl_dir_list_start(subdir);
-                        CU_ASSERT_PTR_NOT_NULL_FATAL(finfo);
+                        it = ofsl_dir_iter_start(subdir);
+                        CU_ASSERT_PTR_NOT_NULL_FATAL(it);
                     }
                     break;
                 }
                 default: {
                     if (sscanf(line_buf, "%383s %u %u-%u-%u %u:%u %*s\n", fname_buf, &fsize, &year, &month, &day, &hour, &minute) == 7) {
                         /* file */
-                        CU_ASSERT_FALSE(ofsl_dir_list_next(finfo));
-                        CU_ASSERT_EQUAL(ofsl_get_file_size(finfo), fsize);
-                        ofsl_time_t created_time = ofsl_get_file_created_time(finfo);
-                        CU_ASSERT_EQUAL(year, created_time.year);
-                        CU_ASSERT_EQUAL(month, created_time.month);
-                        CU_ASSERT_EQUAL(day, created_time.day);
-                        CU_ASSERT_EQUAL(hour, created_time.hour);
-                        CU_ASSERT_EQUAL(minute, created_time.minute);
-                        ofsl_time_t accessed_time = ofsl_get_file_accessed_time(finfo);
-                        CU_ASSERT_EQUAL(year, accessed_time.year);
-                        CU_ASSERT_EQUAL(month, accessed_time.month);
-                        CU_ASSERT_EQUAL(day, accessed_time.day);
-                        CU_ASSERT_EQUAL(0,  accessed_time.hour);
-                        CU_ASSERT_EQUAL(0, accessed_time.minute);
-                        ofsl_time_t modified_time = ofsl_get_file_modified_time(finfo);
-                        CU_ASSERT_EQUAL(year, modified_time.year);
-                        CU_ASSERT_EQUAL(month, modified_time.month);
-                        CU_ASSERT_EQUAL(day, modified_time.day);
-                        CU_ASSERT_EQUAL(0,  modified_time.hour);
-                        CU_ASSERT_EQUAL(0, modified_time.minute);
+                        CU_ASSERT_FALSE(ofsl_dir_iter_next(it));
+                        OFSL_FileAttribute fattr;
+                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_get_attr(it, &fattr));
+                        CU_ASSERT_EQUAL(fattr.size, fsize);
+                        struct tm time_tmp;
+                        ofsl_time_getstdctm(&time_tmp, &fattr.time_created);
+                        CU_ASSERT_EQUAL(time_tmp.tm_year, year - 1900);
+                        CU_ASSERT_EQUAL(time_tmp.tm_mon, month - 1);
+                        CU_ASSERT_EQUAL(time_tmp.tm_mday, day - 1);
+                        CU_ASSERT_EQUAL(time_tmp.tm_hour, hour);
+                        CU_ASSERT_EQUAL(time_tmp.tm_min, minute);
+                        ofsl_time_getstdctm(&time_tmp, &fattr.time_modified);
+                        CU_ASSERT_EQUAL(time_tmp.tm_year, year - 1900);
+                        CU_ASSERT_EQUAL(time_tmp.tm_mon, month - 1);
+                        CU_ASSERT_EQUAL(time_tmp.tm_mday, day - 1);
+                        CU_ASSERT_EQUAL(time_tmp.tm_hour, hour);
+                        CU_ASSERT_EQUAL(time_tmp.tm_min, minute);
+                        ofsl_time_getstdctm(&time_tmp, &fattr.time_accessed);
+                        CU_ASSERT_EQUAL(time_tmp.tm_year, year - 1900);
+                        CU_ASSERT_EQUAL(time_tmp.tm_mon, month - 1);
+                        CU_ASSERT_EQUAL(time_tmp.tm_mday, day - 1);
+                        CU_ASSERT_EQUAL(time_tmp.tm_hour, 0);
+                        CU_ASSERT_EQUAL(time_tmp.tm_min, 0);
                     } else if (sscanf(line_buf, "%383s dir\n", fname_buf) == 1) {
                         /* directory */
-                        CU_ASSERT_FALSE(ofsl_dir_list_next(finfo));
+                        CU_ASSERT_FALSE(ofsl_dir_iter_next(it));
                     } else {
                         /* unrecognized */
                         break;
                     }
-                    printf("%s, %s\n", fname_buf, ofsl_get_file_name(finfo));
-                    CU_ASSERT_STRING_EQUAL(fname_buf, ofsl_get_file_name(finfo));
+                    printf("%s, %s\n", fname_buf, ofsl_dir_iter_get_file_name(it));
+                    CU_ASSERT_STRING_EQUAL(fname_buf, ofsl_dir_iter_get_file_name(it));
                     break;
                 }
             }
         }
     }
-    ofsl_dir_list_end(finfo);
+    ofsl_dir_iter_end(it);
 
     if (subdir) {
         ofsl_dir_close(subdir);
@@ -330,8 +354,8 @@ int main(int argc, char** argv)
             .pTestFunc = test_mount
         },
         {
-            .pName = "filesystem recognization",
-            .pTestFunc = test_get_filesystem_name
+            .pName = "mount info",
+            .pTestFunc = test_get_mount_info
         },
         {
             .pName = "directory list",

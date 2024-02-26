@@ -20,7 +20,7 @@ typedef struct {
     int a;
 } FSAL_File;
 
-const char* fsal_register_drive(OFSL_Drive* drv);
+const char* fsal_register_drive(OFSL_Drive* drv, const char* drvtype);
 void fsal_unregister_drive(const char* id);
 
 int fsal_mount_fs(const char* id);

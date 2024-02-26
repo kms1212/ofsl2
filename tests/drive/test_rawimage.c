@@ -11,7 +11,7 @@ OFSL_Drive* drive;
 
 static int init_test_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/drive/rawimage.img", 0, TEST_SECTOR_SIZE, 4);
+    drive = ofsl_drive_rawimage_create("tests/data/drive/rawimage.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
     return 0;
 }
@@ -24,11 +24,13 @@ static int clean_test_suite(void)
 
 static void test_create(void)
 {
-    /* invalid file name */
-    CU_ASSERT_PTR_NULL(ofsl_create_rawimage_drive("", 0, TEST_SECTOR_SIZE, 4));
+    /* automatic sector size detection */
+    OFSL_Drive* testdrv;
+    CU_ASSERT_PTR_NOT_NULL(testdrv = ofsl_drive_rawimage_create("tests/data/drive/rawimage.img", 0, TEST_SECTOR_SIZE));
+    ofsl_drive_delete(testdrv);
 
-    /* invalid file size */
-    CU_ASSERT_PTR_NULL(ofsl_create_rawimage_drive("tests/data/drive/rawimage.img", 0, TEST_SECTOR_SIZE, 5));
+    /* invalid file name */
+    CU_ASSERT_PTR_NULL(ofsl_drive_rawimage_create("", 0, TEST_SECTOR_SIZE));
 }
 
 static void test_update_info(void)

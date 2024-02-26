@@ -3,14 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <stdio.h>
+#include <time.h>
 
 #include <ofsl/drive/drive.h>
 #include <ofsl/time.h>
-#include <ofsl/endian.h>
 
+#include "src/endian.h"
 #include "fs/fat/internal.h"
 #include "fs/fat/defaults.h"
+#include "fs/internal.h"
 
 #define DISKBUF_TYPE_SECTOR     0
 #define DISKBUF_TYPE_CLUSTER    1
@@ -37,10 +38,9 @@ struct diskbuf_entry {
     uint8_t data[];
 };
 
-struct filesystem_fat {
+struct fs_fat {
     OFSL_FileSystem fs;
-    OFSL_Drive* drv;
-    lba_t lba_offs;
+    OFSL_Partition part;
     struct diskbuf_entry** diskbuf;
     uint16_t    reserved_sectors;
     uint16_t    sector_size;
@@ -77,8 +77,8 @@ struct dir_fat {
     struct fat_direntry_file direntry;
 };
 
-struct finfo_fat {
-    OFSL_FileInfo finfo;
+struct dirit_fat {
+    OFSL_DirectoryIterator dirit;
     struct dir_fat* parent;
     uint32_t current_cluster_idx;
     uint8_t current_entry_idx;
@@ -87,13 +87,13 @@ struct finfo_fat {
     struct fat_direntry_file direntry;
 };
 
-static int read_fat(struct filesystem_fat* fs, unsigned int* entry_idx, uint32_t sector_idx);
+static int read_fat(struct fs_fat* fs, unsigned int* entry_idx, uint32_t sector_idx);
 static int file_iseof(OFSL_File* file_opaque);
-static int match_name(OFSL_Directory* parent_opaque, const char* name, struct finfo_fat* buf);
+static int match_name(OFSL_Directory* parent_opaque, const char* name, struct fat_direntry_file* direntry_buf);
 
-static struct filesystem_fat* check_fs_mounted(OFSL_FileSystem* fs_opaque)
+static struct fs_fat* check_fs_mounted(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = (struct filesystem_fat*)fs_opaque;
+    struct fs_fat* fs = (struct fs_fat*)fs_opaque;
     if (fs == NULL) {
         return NULL;
     } else if (!fs->mounted) {
@@ -113,7 +113,7 @@ static struct file_fat* check_file(OFSL_File* file_opaque)
     return (struct file_fat*)file_opaque;
 }
 
-static int sector_to_cluster(struct filesystem_fat* fs, fatcluster_t* cluster, lba_t lba) {
+static int sector_to_cluster(struct fs_fat* fs, fatcluster_t* cluster, lba_t lba) {
     switch (fs->fat_type) {
         case FAT_TYPE_FAT12:
         case FAT_TYPE_FAT16:
@@ -128,7 +128,7 @@ static int sector_to_cluster(struct filesystem_fat* fs, fatcluster_t* cluster, l
     }
 }
 
-static int cluster_to_sector(struct filesystem_fat* fs, lba_t* lba, fatcluster_t cluster) {
+static int cluster_to_sector(struct fs_fat* fs, lba_t* lba, fatcluster_t cluster) {
     switch (fs->fat_type) {
         case FAT_TYPE_FAT12:
         case FAT_TYPE_FAT16:
@@ -143,7 +143,7 @@ static int cluster_to_sector(struct filesystem_fat* fs, lba_t* lba, fatcluster_t
     }
 }
 
-static int get_next_cluster(struct filesystem_fat* fs, fatcluster_t* cluster, uint32_t num)
+static int get_next_cluster(struct fs_fat* fs, fatcluster_t* cluster, uint32_t num)
 {
     switch (fs->fat_type) {
         case FAT_TYPE_FAT12:
@@ -228,7 +228,7 @@ static int get_next_cluster(struct filesystem_fat* fs, fatcluster_t* cluster, ui
     return 0;
 }
 
-static int flush_diskbuf_entry(struct filesystem_fat* fs, unsigned int entry) {
+static int flush_diskbuf_entry(struct fs_fat* fs, unsigned int entry) {
     if (!fs->diskbuf[entry]) {
         fs->fs.error = FATE_IDBENT;
         return 1;
@@ -239,20 +239,20 @@ static int flush_diskbuf_entry(struct filesystem_fat* fs, unsigned int entry) {
             case DISKBUF_TYPE_CLUSTER: {
                 lba_t clus_head_lba;
                 cluster_to_sector(fs, &clus_head_lba, fs->diskbuf[entry]->cluster);
-                fs->drv->ops->write_sector(
-                    fs->drv,
+                ofsl_drive_write_sector(
+                    fs->part.drv,
                     fs->diskbuf[entry]->data,
-                    fs->lba_offs + clus_head_lba,
+                    fs->part.lba_start + clus_head_lba,
                     fs->sector_size,
                     fs->sectors_per_cluster);
                 fs->diskbuf[entry]->dirty = 0;
                 break;
             }
             case DISKBUF_TYPE_SECTOR:
-                fs->drv->ops->write_sector(
-                    fs->drv,
+                ofsl_drive_write_sector(
+                    fs->part.drv,
                     fs->diskbuf[entry]->data,
-                    fs->lba_offs + fs->diskbuf[entry]->lba,
+                    fs->part.lba_start + fs->diskbuf[entry]->lba,
                     fs->sector_size,
                     1);
                 fs->diskbuf[entry]->dirty = 0;
@@ -278,7 +278,7 @@ static int flush_diskbuf_entry(struct filesystem_fat* fs, unsigned int entry) {
  * decreases the `usage_tag` member of each entries for further entry replacement.
  *  Flushes old entry when replacement is required.
  */
-static int allocate_diskbuf_sector_entry(struct filesystem_fat* fs, unsigned int* entry_idx, lba_t lba)
+static int allocate_diskbuf_sector_entry(struct fs_fat* fs, unsigned int* entry_idx, lba_t lba)
 {
 #define SHOULD_REALLOC  0
 #define SHOULD_ALLOC    1
@@ -345,16 +345,16 @@ static int allocate_diskbuf_sector_entry(struct filesystem_fat* fs, unsigned int
  * @param lba LBA address of the sector
  * @return int 0 if success, otherwise failed
  */
-static int read_sector(struct filesystem_fat* fs, unsigned int* entry_idx, lba_t lba)
+static int read_sector(struct fs_fat* fs, unsigned int* entry_idx, lba_t lba)
 {
     unsigned int target_entry_idx;
     allocate_diskbuf_sector_entry(fs, &target_entry_idx, lba);
 
     if (!fs->diskbuf[target_entry_idx]->data_valid) {
-        fs->drv->ops->read_sector(
-            fs->drv,
+        ofsl_drive_read_sector(
+            fs->part.drv,
             fs->diskbuf[target_entry_idx]->data,
-            fs->lba_offs + lba,
+            fs->part.lba_start + lba,
             fs->sector_size,
             1);
         fs->diskbuf[target_entry_idx]->data_valid = 1;
@@ -383,7 +383,7 @@ static int read_sector(struct filesystem_fat* fs, unsigned int* entry_idx, lba_t
  *   `fs->diskbuf[entry_idx]->dirty = 1`
  * - The changes will be written to the disk when the entry is flushed.
  */
-static int write_sector(struct filesystem_fat* fs, unsigned int* entry_idx, const void* buf, lba_t lba)
+static int write_sector(struct fs_fat* fs, unsigned int* entry_idx, const void* buf, lba_t lba)
 {
     unsigned int target_entry_idx;
     allocate_diskbuf_sector_entry(fs, &target_entry_idx, lba);
@@ -410,7 +410,7 @@ static int write_sector(struct filesystem_fat* fs, unsigned int* entry_idx, cons
  * decreases the `usage_tag` member of each entries for further entry replacement.
  *  Flushes old entry when replacement is required.
  */
-static int allocate_diskbuf_cluster_entry(struct filesystem_fat* fs, unsigned int* entry_idx, fatcluster_t cluster)
+static int allocate_diskbuf_cluster_entry(struct fs_fat* fs, unsigned int* entry_idx, fatcluster_t cluster)
 {
 #define SHOULD_REALLOC  0
 #define SHOULD_ALLOC    1
@@ -477,7 +477,7 @@ static int allocate_diskbuf_cluster_entry(struct filesystem_fat* fs, unsigned in
  * @param cluster cluster index
  * @return int 0 if success, otherwise failed
  */
-static int read_cluster(struct filesystem_fat* fs, unsigned int* entry_idx, fatcluster_t cluster)
+static int read_cluster(struct fs_fat* fs, unsigned int* entry_idx, fatcluster_t cluster)
 {
     unsigned int target_entry_idx;
     allocate_diskbuf_cluster_entry(fs, &target_entry_idx, cluster);
@@ -486,10 +486,10 @@ static int read_cluster(struct filesystem_fat* fs, unsigned int* entry_idx, fatc
     cluster_to_sector(fs, &lba, cluster);
 
     if (!fs->diskbuf[target_entry_idx]->data_valid) {
-        fs->drv->ops->read_sector(
-            fs->drv,
+        ofsl_drive_read_sector(
+            fs->part.drv,
             fs->diskbuf[target_entry_idx]->data,
-            fs->lba_offs + lba,
+            fs->part.lba_start + lba,
             fs->sector_size,
             fs->sectors_per_cluster);
         fs->diskbuf[target_entry_idx]->data_valid = 1;
@@ -518,7 +518,7 @@ static int read_cluster(struct filesystem_fat* fs, unsigned int* entry_idx, fatc
  *   `fs->diskbuf[entry_idx]->dirty = 1`
  * - The changes will be written to the disk when the entry is flushed.
  */
-static int write_cluster(struct filesystem_fat* fs, unsigned int* entry_idx, const void* buf, lba_t lba)
+static int write_cluster(struct fs_fat* fs, unsigned int* entry_idx, const void* buf, lba_t lba)
 {
     unsigned int target_entry_idx;
     allocate_diskbuf_cluster_entry(fs, &target_entry_idx, lba);
@@ -532,7 +532,7 @@ static int write_cluster(struct filesystem_fat* fs, unsigned int* entry_idx, con
     return 0;
 }
 
-static int read_fat(struct filesystem_fat* fs, unsigned int* entry_idx, uint32_t sector_idx)
+static int read_fat(struct fs_fat* fs, unsigned int* entry_idx, uint32_t sector_idx)
 {
     return read_sector(fs, entry_idx, fs->reserved_sectors + sector_idx);
 }
@@ -713,7 +713,7 @@ static uint8_t get_sfn_checksum(char buf[static FAT_SFN_BUFLEN])
 
 static const char* get_error_string(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = (struct filesystem_fat*)fs_opaque;
+    struct fs_fat* fs = (struct fs_fat*)fs_opaque;
 
     if (!fs) return NULL;
     if (fs->fs.error >= 0) return NULL;
@@ -723,19 +723,17 @@ static const char* get_error_string(OFSL_FileSystem* fs_opaque)
 
 static int mount(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = (struct filesystem_fat*)fs_opaque;
+    struct fs_fat* fs = (struct fs_fat*)fs_opaque;
 
     fs->diskbuf = malloc(sizeof(struct diskbuf_entry*) * fs->options.diskbuf_count);
 
-    fs->sector_size = fs->drv->drvinfo.bytes_per_sector;
+    fs->sector_size = 512;
 
     // Read sector 0 (BPB)
     unsigned int entry_idx;
     read_sector(fs, &entry_idx, 0);
 
-    const struct fat_common_bpb* bpb = (void*)fs->diskbuf[entry_idx]->data;
-    const struct fat1216_bpb* bpb1216 = (void*)fs->diskbuf[entry_idx]->data;
-    const struct fat32_bpb* bpb32 = (void*)fs->diskbuf[entry_idx]->data;
+    const struct fat_bpb_sector* bpb = (void*)fs->diskbuf[entry_idx]->data;
 
     fs->sector_size = bpb->bytes_per_sector;
     fs->sectors_per_cluster = bpb->sectors_per_cluster;
@@ -743,7 +741,7 @@ static int mount(OFSL_FileSystem* fs_opaque)
     fs->root_entry_count = bpb->root_entry_count;
     fs->reserved_sectors = bpb->reserved_sector_count;
     fs->root_sector_count = ((fs->root_entry_count * 32) + (fs->sector_size - 1)) / fs->sector_size;
-    fs->fat_size = bpb->fat_size16 ? bpb->fat_size16 : bpb32->fat_size32;
+    fs->fat_size = bpb->fat_size16 ? bpb->fat_size16 : bpb->fat32.fat_size32;
     fs->total_sector_count = bpb->total_sector_count16 ? bpb->total_sector_count16 : bpb->total_sector_count32;
     fs->data_area_begin = fs->reserved_sectors + (bpb->fat_count * fs->fat_size);
     uint32_t data_sectors = fs->total_sector_count - (fs->data_area_begin + fs->root_sector_count);
@@ -760,7 +758,7 @@ static int mount(OFSL_FileSystem* fs_opaque)
 
     // Read FSINFO if FAT32
     if (fs->fat_type == FAT_TYPE_FAT32) {
-        fs->root_cluster = bpb32->root_cluster;
+        fs->root_cluster = bpb->fat32.root_cluster;
 
         read_sector(fs, &entry_idx, 1);
         const struct fat_fsinfo* fsinfo = (void*)fs->diskbuf[entry_idx]->data;
@@ -776,7 +774,7 @@ static int mount(OFSL_FileSystem* fs_opaque)
 
 static int unmount(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = check_fs_mounted(fs_opaque);
+    struct fs_fat* fs = check_fs_mounted(fs_opaque);
     if (!fs) return 1;
 
     for (int i = 0; i < fs->options.diskbuf_count; i++) {
@@ -790,9 +788,10 @@ static int unmount(OFSL_FileSystem* fs_opaque)
     return 0;
 }
 
-static const char* get_filesystem_name(OFSL_FileSystem* fs_opaque)
+static int get_mount_info(OFSL_FileSystem* fs_opaque, OFSL_MountInfo* mntinfo)
 {
-    struct filesystem_fat* fs = (struct filesystem_fat*)fs_opaque;
+    struct fs_fat* fs = check_fs_mounted(fs_opaque);
+    if (!fs) return 1;
 
     static const char* const fat_name[] = {
         "UNKNOWN",
@@ -801,7 +800,17 @@ static const char* get_filesystem_name(OFSL_FileSystem* fs_opaque)
         "FAT32",
     };
 
-    return fat_name[fs->fat_type];
+    static const size_t fat_max_part_sect_cnt[] = {
+        0,
+
+    };
+
+    _ofsl_fs_mntinfo_init(mntinfo);
+    mntinfo->fs_name = fat_name[fs->fat_type];
+    mntinfo->vol_name = NULL;
+    mntinfo->vol_serial = NULL;
+
+    return 0;
 }
 
 static int dir_create(OFSL_Directory* dir, const char* name)
@@ -816,7 +825,7 @@ static int dir_remove(OFSL_Directory* dir, const char* name)
 
 static OFSL_Directory* rootdir_open(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = check_fs_mounted(fs_opaque);
+    struct fs_fat* fs = check_fs_mounted(fs_opaque);
     if (!fs) return NULL;
 
     struct dir_fat* dir = malloc(sizeof(struct dir_fat));
@@ -833,17 +842,17 @@ static OFSL_Directory* dir_open(OFSL_Directory* parent_opaque, const char* name)
 {
     struct dir_fat* parent = check_dir(parent_opaque);
     if (!parent) return NULL;
-    struct filesystem_fat* fs = check_fs_mounted(parent->dir.fs);
+    struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
     if (!fs) return NULL;
 
-    struct finfo_fat finfo;
-    if (!match_name((OFSL_Directory*)parent, name, &finfo)) {
+    struct fat_direntry_file dirent;
+    if (!match_name((OFSL_Directory*)parent, name, &dirent)) {
         fs->fs.error = OFSL_FSE_NOENT;
         return NULL;
     }
 
-    const uint16_t head_cluster_lo = finfo.direntry.cluster_location;
-    const uint16_t head_cluster_hi = finfo.direntry.cluster_location_high;
+    const uint16_t head_cluster_lo = dirent.cluster_location;
+    const uint16_t head_cluster_hi = dirent.cluster_location_high;
     const uint32_t head_cluster = (head_cluster_hi << 16) | head_cluster_lo;
 
     struct dir_fat* dir = malloc(sizeof(struct dir_fat));
@@ -851,7 +860,7 @@ static OFSL_Directory* dir_open(OFSL_Directory* parent_opaque, const char* name)
     dir->dir.fs = (OFSL_FileSystem*)fs;
     dir->head_cluster = head_cluster;
     dir->parent = parent;
-    memcpy(&dir->direntry, &finfo.direntry, sizeof(finfo.direntry));
+    memcpy(&dir->direntry, &dirent, sizeof(dirent));
 
     parent->child_count++;
 
@@ -873,30 +882,30 @@ static int dir_close(OFSL_Directory* dir_opaque)
     return 0;
 }
 
-static OFSL_FileInfo* dir_list_start(OFSL_Directory* dir_opaque)
+static OFSL_DirectoryIterator* dir_iter_start(OFSL_Directory* dir_opaque)
 {
     struct dir_fat* dir = check_dir(dir_opaque);
     if (!dir) return NULL;
-    struct filesystem_fat* fs = check_fs_mounted(dir->dir.fs);
+    struct fs_fat* fs = check_fs_mounted(dir->dir.fs);
     if (!fs) return NULL;
 
-    struct finfo_fat* finfo = malloc(sizeof(struct finfo_fat));
-    finfo->finfo.fs = (OFSL_FileSystem*)fs;
-    finfo->finfo.ops = fs->fs.ops;
-    finfo->parent = dir;
-    finfo->valid = 0;
-    finfo->current_cluster_idx = 0;
-    finfo->current_entry_idx = 0;
+    struct dirit_fat* it = malloc(sizeof(struct dirit_fat));
+    it->dirit.fs = (OFSL_FileSystem*)fs;
+    it->dirit.ops = fs->fs.ops;
+    it->parent = dir;
+    it->valid = 0;
+    it->current_cluster_idx = 0;
+    it->current_entry_idx = 0;
 
-    return (OFSL_FileInfo*)finfo;
+    return (OFSL_DirectoryIterator*)it;
 }
 
-static int dir_list_next(OFSL_FileInfo* finfo_opaque)
+static int dir_iter_next(OFSL_DirectoryIterator* it_opaque)
 {
-    struct finfo_fat* finfo = (struct finfo_fat*)finfo_opaque;
-    if (!finfo) return 1;
-    struct dir_fat* dir = finfo->parent;
-    struct filesystem_fat* fs = check_fs_mounted(finfo->finfo.fs);
+    struct dirit_fat* it = (struct dirit_fat*)it_opaque;
+    if (!it) return 1;
+    struct dir_fat* dir = it->parent;
+    struct fs_fat* fs = check_fs_mounted(it->dirit.fs);
     if (!fs) return 1;
 
     uint16_t entry_count = 
@@ -910,153 +919,130 @@ static int dir_list_next(OFSL_FileInfo* finfo_opaque)
     while (1) {
         if (fs->fat_type != FAT_TYPE_FAT32 && dir->head_cluster == 0) {
             /* root directory */
-            read_sector(fs, &diskbuf_entry_idx, fs->data_area_begin + finfo->current_cluster_idx);
+            read_sector(fs, &diskbuf_entry_idx, fs->data_area_begin + it->current_cluster_idx);
         } else {
             fatcluster_t current_cluster = dir->head_cluster;
-            if (get_next_cluster(fs, &current_cluster, finfo->current_cluster_idx)) {
-                free(finfo);
+            if (get_next_cluster(fs, &current_cluster, it->current_cluster_idx)) {
+                free(it);
                 return 1;
             }
             read_cluster(fs, &diskbuf_entry_idx, current_cluster);
         }
         union fat_dir_entry* entries = (union fat_dir_entry*)fs->diskbuf[diskbuf_entry_idx]->data;
 
-        for (; finfo->current_entry_idx < entry_count; finfo->current_entry_idx++) {
-            if (!entries[finfo->current_entry_idx].file.name[0]) {  // End of entry list
+        for (; it->current_entry_idx < entry_count; it->current_entry_idx++) {
+            if (!entries[it->current_entry_idx].file.name[0]) {  // End of entry list
                 return 1;
-            } else if (entries[finfo->current_entry_idx].file.name[0] == 0xE5) {
+            } else if (entries[it->current_entry_idx].file.name[0] == 0xE5) {
                 /* skip if file entry is deleted */
                 continue;
-            } else if ((entries[finfo->current_entry_idx].file.attribute & FAT_ATTR_LFNENTRY) == FAT_ATTR_LFNENTRY) {
+            } else if ((entries[it->current_entry_idx].file.attribute & FAT_ATTR_LFNENTRY) == FAT_ATTR_LFNENTRY) {
                 // if current entry is LFN entry
                 if (fs->options.lfn_enabled) {
                     // write to buffer if LFN is enabled
-                    get_lfn_filename(&entries[finfo->current_entry_idx].lfn, lfn_ucs2_buf);
+                    get_lfn_filename(&entries[it->current_entry_idx].lfn, lfn_ucs2_buf);
                     is_lfn = 1;
                 }  // otherwise skip
                 continue;
             }
 
             if (is_lfn) {
-                lfn_ucs2_to_utf8(finfo->filename, lfn_ucs2_buf, fs->options.unicode_enabled, fs->options.unknown_char_fallback);
+                lfn_ucs2_to_utf8(it->filename, lfn_ucs2_buf, fs->options.unicode_enabled, fs->options.unknown_char_fallback);
             } else {
-                get_sfn_filename(&entries[finfo->current_entry_idx].file, finfo->filename, fs->options.sfn_lowercase);
+                get_sfn_filename(&entries[it->current_entry_idx].file, it->filename, fs->options.sfn_lowercase);
             }
-            memcpy(&finfo->direntry, &entries[finfo->current_entry_idx], sizeof(struct fat_direntry_file));
-            finfo->current_entry_idx++;
+            memcpy(&it->direntry, &entries[it->current_entry_idx], sizeof(struct fat_direntry_file));
+            it->current_entry_idx++;
             return 0;
         }
 
-        finfo->current_cluster_idx++;
-        finfo->current_entry_idx = 0;
+        it->current_cluster_idx++;
+        it->current_entry_idx = 0;
     }
 }
 
-static void dir_list_end(OFSL_FileInfo* finfo_opaque)
+static void dir_iter_end(OFSL_DirectoryIterator* it_opaque)
 {
-    free(finfo_opaque);
+    free(it_opaque);
 }
 
-static OFSL_FileInfo* get_file_info(OFSL_Directory* parent_opaque, const char* name)
+static const char* dir_iter_get_file_name(const OFSL_DirectoryIterator* it_opaque)
+{
+    const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+    return it->filename;
+}
+
+static int dirent_to_fattr(OFSL_FileAttribute* fattr, const struct fat_direntry_file* dirent)
+{
+    memset(fattr, 0, sizeof(*fattr));
+
+    fattr->size       = dirent->size;
+    fattr->directory  = (dirent->attribute & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY;
+    fattr->immutable  = (dirent->attribute & FAT_ATTR_READ_ONLY) == FAT_ATTR_READ_ONLY;
+    fattr->hidden     = (dirent->attribute & FAT_ATTR_HIDDEN) == FAT_ATTR_HIDDEN;
+    fattr->system     = (dirent->attribute & FAT_ATTR_SYSTEM) == FAT_ATTR_SYSTEM;
+    fattr->compressed = 0;
+    fattr->encrypted  = 0;
+    fattr->link       = 0;
+    fattr->symlink    = 0;
+
+    struct tm tm;
+    tm.tm_sec  = dirent->created_time.second_div2 << 1;
+    tm.tm_sec += dirent->created_tenth / 10;
+    tm.tm_min  = dirent->created_time.minute;
+    tm.tm_hour = dirent->created_time.hour;
+    tm.tm_mday = dirent->created_date.day - 1;
+    tm.tm_mon  = dirent->created_date.month - 1;
+    tm.tm_year = dirent->created_date.year + 80;
+    ofsl_time_fromstdctm(&fattr->time_created, &tm);
+
+    tm.tm_sec  = dirent->modified_time.second_div2 << 1;
+    tm.tm_min  = dirent->modified_time.minute;
+    tm.tm_hour = dirent->modified_time.hour;
+    tm.tm_mday = dirent->modified_date.day - 1;
+    tm.tm_mon  = dirent->modified_date.month - 1;
+    tm.tm_year = dirent->modified_date.year + 80;
+    ofsl_time_fromstdctm(&fattr->time_modified, &tm);
+
+    tm.tm_sec  = 0;
+    tm.tm_min  = 0;
+    tm.tm_hour = 0;
+    tm.tm_mday = dirent->accessed_date.day - 1;
+    tm.tm_mon  = dirent->accessed_date.month - 1;
+    tm.tm_year = dirent->accessed_date.year + 80;
+    ofsl_time_fromstdctm(&fattr->time_accessed, &tm);
+    return 0;
+}
+
+static int dir_iter_get_attr(const OFSL_DirectoryIterator* it_opaque, OFSL_FileAttribute* fattr)
+{
+    const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+
+    return dirent_to_fattr(fattr, &it->direntry);
+}
+
+static int get_file_attr(OFSL_Directory* parent_opaque, const char* name, OFSL_FileAttribute* fattr)
 {
     const struct dir_fat* parent = check_dir(parent_opaque);
     if (!parent) {
-        return NULL;
+        return 1;
     }
-    struct filesystem_fat* fs = check_fs_mounted(parent->dir.fs);
+    struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
     if (!fs) {
-        return NULL;
+        return 1;
     }
 
-    struct finfo_fat* finfo = malloc(sizeof(struct finfo_fat));
-    if (!match_name((OFSL_Directory*)parent, name, finfo)) {
+    struct fat_direntry_file dirent;
+    if (!match_name((OFSL_Directory*)parent, name, &dirent)) {
         fs->fs.error = OFSL_FSE_NOENT;
-        return NULL;
+        return 1;
+    }
+
+    if (dirent_to_fattr(fattr, &dirent)) {
+        return 1;
     }
     
-    return (OFSL_FileInfo*)finfo;
-}
-
-static const char* get_file_name(const OFSL_FileInfo* finfo_opaque)
-{
-    const struct finfo_fat* finfo = (const struct finfo_fat*)finfo_opaque;
-    return finfo->filename;
-}
-
-static ssize_t get_file_size(const OFSL_FileInfo* finfo_opaque)
-{
-    const struct finfo_fat* finfo = (const struct finfo_fat*)finfo_opaque;
-    return finfo->direntry.size;
-}
-
-static ofsl_time_t get_file_created_time(const OFSL_FileInfo* finfo_opaque)
-{
-    const struct finfo_fat* finfo = (const struct finfo_fat*)finfo_opaque;
-
-    ofsl_time_t time;
-    time.year = finfo->direntry.created_date.year + 1980;
-    time.month = finfo->direntry.created_date.month;
-    time.day = finfo->direntry.created_date.day;
-    time.hour = finfo->direntry.created_time.hour;
-    time.minute = finfo->direntry.created_time.minute;
-    time.second = finfo->direntry.created_time.second_div2 << 1;
-    time.second += finfo->direntry.created_tenth;
-    time.nsec10 = 0;
-    time.valid = 1;
-    return time;
-}
-
-static ofsl_time_t get_file_accessed_time(const OFSL_FileInfo* finfo_opaque)
-{
-    const struct finfo_fat* finfo = (const struct finfo_fat*)finfo_opaque;
-
-    ofsl_time_t time;
-    time.year = finfo->direntry.accessed_date.year + 1980;
-    time.month = finfo->direntry.accessed_date.month;
-    time.day = finfo->direntry.accessed_date.day;
-    time.hour = 0;
-    time.minute = 0;
-    time.second = 0;
-    time.nsec10 = 0;
-    time.valid = 1;
-    return time;
-}
-
-static ofsl_time_t get_file_modified_time(const OFSL_FileInfo* finfo_opaque)
-{
-    const struct finfo_fat* finfo = (const struct finfo_fat*)finfo_opaque;
-
-    ofsl_time_t time;
-    time.year = finfo->direntry.modified_date.year + 1980;
-    time.month = finfo->direntry.modified_date.month;
-    time.day = finfo->direntry.modified_date.day;
-    time.hour = 0;
-    time.minute = 0;
-    time.second = 0;
-    time.nsec10 = 0;
-    time.valid = 1;
-    return time;
-}
-
-static OFSL_FileAttribute get_file_attrib(const OFSL_FileInfo* finfo_opaque)
-{
-    const struct finfo_fat* finfo = (const struct finfo_fat*)finfo_opaque;
-
-    OFSL_FileAttribute attrib;
-    if (finfo->direntry.attribute & FAT_ATTR_DIRECTORY) {
-        attrib.type = OFSL_FTYPE_DIRECTORY;
-    } else {
-        attrib.type = OFSL_FTYPE_FILE;
-    }
-
-    attrib.immutable = (finfo->direntry.attribute & FAT_ATTR_READ_ONLY) == FAT_ATTR_READ_ONLY;
-    attrib.hidden = (finfo->direntry.attribute & FAT_ATTR_HIDDEN) == FAT_ATTR_HIDDEN;
-    attrib.system = (finfo->direntry.attribute & FAT_ATTR_SYSTEM) == FAT_ATTR_SYSTEM;
-    attrib.compressed = 0;
-    attrib.encrypted = 0;
-    attrib.symlink = 0;
-
-    return attrib;
+    return 0;
 }
 
 static int file_create(OFSL_Directory* path, const char* name)
@@ -1069,31 +1055,31 @@ static int file_remove(OFSL_Directory* path, const char* name)
     return -1;
 }
 
-static int match_name(OFSL_Directory* parent_opaque, const char* name, struct finfo_fat* buf)
+static int match_name(OFSL_Directory* parent_opaque, const char* name, struct fat_direntry_file* direntry_buf)
 {
     struct dir_fat* parent = check_dir(parent_opaque);
     if (!parent) {
         return 0;
     }
-    struct filesystem_fat* fs = check_fs_mounted(parent->dir.fs);
+    struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
 
-    struct finfo_fat* finfo = (struct finfo_fat*)dir_list_start(parent_opaque);
-    while (!dir_list_next((OFSL_FileInfo*)finfo)) {
+    struct dirit_fat* it = (struct dirit_fat*)dir_iter_start(parent_opaque);
+    while (!dir_iter_next((OFSL_DirectoryIterator*)it)) {
         if (fs->options.case_sensitive) {
-            if (strncmp(name, finfo->filename, sizeof(finfo->filename)) == 0) {
-                memcpy(buf, finfo, sizeof(struct finfo_fat));
-                dir_list_end((OFSL_FileInfo*)finfo);
+            if (strncmp(name, it->filename, sizeof(it->filename)) == 0) {
+                memcpy(direntry_buf, &it->direntry, sizeof(*direntry_buf));
+                dir_iter_end((OFSL_DirectoryIterator*)it);
                 return 1;
             }
         } else {
-            if (strncasecmp(name, finfo->filename, sizeof(finfo->filename)) == 0) {
-                memcpy(buf, finfo, sizeof(struct finfo_fat));
-                dir_list_end((OFSL_FileInfo*)finfo);
+            if (strncasecmp(name, it->filename, sizeof(it->filename)) == 0) {
+                memcpy(direntry_buf, &it->direntry, sizeof(*direntry_buf));
+                dir_iter_end((OFSL_DirectoryIterator*)it);
                 return 1;
             }
         }
     }
-    dir_list_end((OFSL_FileInfo*)finfo);
+    dir_iter_end((OFSL_DirectoryIterator*)it);
     return 0;
 }
 
@@ -1103,19 +1089,19 @@ static OFSL_File* file_open(OFSL_Directory* parent_opaque, const char* name, con
     if (!parent) {
         return NULL;
     }
-    struct filesystem_fat* fs = check_fs_mounted(parent->dir.fs);
+    struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
     if (!fs) {
         return NULL;
     }
 
-    struct finfo_fat finfo;
-    if (!match_name((OFSL_Directory*)parent, name, &finfo)) {
+    struct fat_direntry_file dirent;
+    if (!match_name((OFSL_Directory*)parent, name, &dirent)) {
         fs->fs.error = OFSL_FSE_NOENT;
         return NULL;
     }
 
-    const uint16_t head_cluster_lo = finfo.direntry.cluster_location;
-    const uint16_t head_cluster_hi = finfo.direntry.cluster_location_high;
+    const uint16_t head_cluster_lo = dirent.cluster_location;
+    const uint16_t head_cluster_hi = dirent.cluster_location_high;
     const uint32_t head_cluster = (head_cluster_hi << 16) | head_cluster_lo;
 
     struct file_fat* file = malloc(sizeof(struct file_fat));
@@ -1124,7 +1110,7 @@ static OFSL_File* file_open(OFSL_Directory* parent_opaque, const char* name, con
     file->head_cluster = head_cluster;
     file->parent = parent;
     file->cursor = 0;
-    memcpy(&file->direntry, &finfo.direntry, sizeof(finfo.direntry));
+    memcpy(&file->direntry, &dirent, sizeof(dirent));
 
     parent->child_count++;
 
@@ -1151,7 +1137,7 @@ static int file_close(OFSL_File* file_opaque)
 static ssize_t file_read(OFSL_File* file_opaque, void* buf, size_t size, size_t count)
 {
     struct file_fat* file = check_file(file_opaque);
-    struct filesystem_fat* fs = check_fs_mounted(file->file.fs);
+    struct fs_fat* fs = check_fs_mounted(file->file.fs);
     struct fat_direntry_file* entry = &file->direntry;
     if (!file || !fs) {
         return -1;
@@ -1275,34 +1261,30 @@ static int file_iseof(OFSL_File* file_opaque)
 
 static void _delete(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = (struct filesystem_fat*)fs_opaque;
+    struct fs_fat* fs = (struct fs_fat*)fs_opaque;
 
     free(fs);
 }
 
-OFSL_FileSystem* ofsl_create_fs_fat(OFSL_Drive* drv, lba_t lba_offs)
+OFSL_FileSystem* ofsl_fs_fat_create(OFSL_Partition* part)
 {
     static const struct ofsl_fs_ops fsops = {
         .get_error_string = get_error_string,
         ._delete = _delete,
         .mount = mount,
         .unmount = unmount,
-        .get_filesystem_name = get_filesystem_name,
+        .get_mount_info = get_mount_info,
         .dir_create = dir_create,
         .dir_remove = dir_remove,
         .rootdir_open = rootdir_open,
         .dir_open = dir_open,
         .dir_close = dir_close,
-        .dir_list_start = dir_list_start,
-        .dir_list_next = dir_list_next,
-        .dir_list_end = dir_list_end,
-        .get_file_info = get_file_info,
-        .get_file_name = get_file_name,
-        .get_file_attrib = get_file_attrib,
-        .get_file_created_time = get_file_created_time,
-        .get_file_modified_time = get_file_modified_time,
-        .get_file_accessed_time = get_file_accessed_time,
-        .get_file_size = get_file_size,
+        .dir_iter_start = dir_iter_start,
+        .dir_iter_next = dir_iter_next,
+        .dir_iter_end = dir_iter_end,
+        .dir_iter_get_file_name = dir_iter_get_file_name,
+        .dir_iter_get_attr = dir_iter_get_attr,
+        .get_file_attr = get_file_attr,
         .file_create = file_create,
         .file_remove = file_remove,
         .file_open = file_open,
@@ -1310,15 +1292,17 @@ OFSL_FileSystem* ofsl_create_fs_fat(OFSL_Drive* drv, lba_t lba_offs)
         .file_read = file_read,
         .file_write = file_write,
         .file_seek = file_seek,
-        .file_flush = file_flush,
         .file_tell = file_tell,
         .file_iseof = file_iseof,
     };
 
-    struct filesystem_fat* fs = malloc(sizeof(struct filesystem_fat));
+    if (part->drv->drvinfo.sector_size < 512) {
+        return NULL;
+    }
+
+    struct fs_fat* fs = malloc(sizeof(struct fs_fat));
     
-    fs->drv = drv;
-    fs->lba_offs = lba_offs;
+    fs->part = *part;
     fs->fs.ops = &fsops;
 
     /* default settings */
@@ -1338,7 +1322,7 @@ OFSL_FileSystem* ofsl_create_fs_fat(OFSL_Drive* drv, lba_t lba_offs)
 
 struct ofsl_fs_fat_option* ofsl_fs_fat_get_option(OFSL_FileSystem* fs_opaque)
 {
-    struct filesystem_fat* fs = (struct filesystem_fat*)fs_opaque;
+    struct fs_fat* fs = (struct fs_fat*)fs_opaque;
 
     return fs->mounted ? NULL : &fs->options;
 }

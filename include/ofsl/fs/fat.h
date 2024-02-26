@@ -2,6 +2,7 @@
 #define OFSL_FS_FAT_H__
 
 #include <ofsl/fs/fs.h>
+#include <ofsl/partition/partition.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +19,7 @@ struct ofsl_fs_fat_option {
     char        unknown_char_fallback;
 };
 
-OFSL_FileSystem* ofsl_create_fs_fat(OFSL_Drive* drv, lba_t lba_offs);
+OFSL_FileSystem* ofsl_fs_fat_create(OFSL_Partition* part);
 
 struct ofsl_fs_fat_option* ofsl_fs_fat_get_option(OFSL_FileSystem* fs);
 

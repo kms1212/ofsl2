@@ -1,6 +1,7 @@
 #ifndef CRYPTO_CONFIG_H__
 #define CRYPTO_CONFIG_H__
 
-#cmakedefine ZLIB_FOUND
+#cmakedefine USE_ZLIB
+#cmakedefine BYTE_ORDER_BIG_ENDIAN
 
 #endif

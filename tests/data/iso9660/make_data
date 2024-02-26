@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# this tool requires GNU xorriso, GNU coreutils, dd, and cat.
+
+mkdir -p image_files
+if [ ! -f image_files/file.bin ]; then
+    dd if=/dev/urandom of=image_files/file.bin bs=1024 count=1
+fi
+FILE_BIN_MD5=$(md5sum image_files/file.bin | cut -d' ' -f1)
+touch -d 2024-02-2019:18:00 image_files/file.bin
+
+if [ ! -f image_files/longfilename.bin ]; then
+    dd if=/dev/urandom of=image_files/longfilename.bin bs=1024 count=1
+fi
+LONGFILENAME_BIN_MD5=$(md5sum image_files/longfilename.bin | cut -d' ' -f1)
+touch -d 2024-02-2019:18:00 image_files/longfilename.bin
+
+if [ ! -f image_files/유니코드.bin ]; then
+    dd if=/dev/urandom of=image_files/유니코드.bin bs=1024 count=1
+fi
+UTEST1_BIN_MD5=$(md5sum image_files/유니코드.bin | cut -d' ' -f1)
+touch -d 2024-02-2019:18:00 image_files/유니코드.bin
+
+xorrisofs \
+    -o image.iso \
+    -R -J \
+    -V "ISO9660FS" \
+    -graft-points \
+    /=image_files
+
+cat > image-tree.txt <<EOF
+# directory tree of image.iso
+# file_name file_size date_created time_created md5_checksum
+
+FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
+longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+유니코드.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+EOF

@@ -67,7 +67,7 @@ union fat_date {
     };
 } __attribute__((packed));
 
-struct fat_common_bpb {
+struct fat_bpb_sector {
     uint8_t         x86_jump_code[3];
     char            oem_name[8];
     uint16_t        bytes_per_sector;
@@ -82,40 +82,38 @@ struct fat_common_bpb {
     uint16_t        head_count;
     uint32_t        hidden_sector_count;
     uint32_t        total_sector_count32;
-} __attribute__((packed));
 
-struct fat1216_bpb {
-    struct fat_common_bpb common;
+    union {
+        struct {
+            uint8_t         drive_num;
+            uint8_t         __reserved1;
+            uint8_t         boot_signature;
+            uint32_t        volume_serial;
+            char            volume_label[11];
+            char            fs_type[8];
 
-    uint8_t         drive_num;
-    uint8_t         __reserved1;
-    uint8_t         boot_signature;
-    uint32_t        volume_serial;
-    char            volume_label[11];
-    char            fs_type[8];
+            uint8_t         boot_code[448];
+        } __attribute__((packed)) fat;
 
-    uint8_t         boot_code[448];
-    uint16_t        signature;
-} __attribute__((packed));
+        struct {
+            uint32_t        fat_size32;
+            uint16_t        flags;
+            uint16_t        version;
+            uint32_t        root_cluster;
+            uint16_t        fsinfo_sector;
+            uint16_t        bpb_backup_sector;
+            uint8_t         __reserved1[12];
+            uint8_t         physical_drive_num;
+            uint8_t         __reserved2;
+            uint8_t         extended_boot_signature;
+            uint32_t        volume_serial;
+            char            volume_label[11];
+            char            fs_type[8];
 
-struct fat32_bpb {
-    struct fat_common_bpb common;
+            uint8_t         boot_code[420];
+        } __attribute__((packed)) fat32;
+    };
 
-    uint32_t        fat_size32;
-    uint16_t        flags;
-    uint16_t        version;
-    uint32_t        root_cluster;
-    uint16_t        fsinfo_sector;
-    uint16_t        bpb_backup_sector;
-    uint8_t         __reserved1[12];
-    uint8_t         physical_drive_num;
-    uint8_t         __reserved2;
-    uint8_t         extended_boot_signature;
-    uint32_t        volume_serial;
-    char            volume_label[11];
-    char            fs_type[8];
-
-    uint8_t         boot_code[420];
     uint16_t        signature;
 } __attribute__((packed));
 

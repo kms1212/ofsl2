@@ -21,10 +21,10 @@ class Directory {
 };
 
 class File {
- public:
+public:
     File(State* state, const Path& filename, const char* mode);
     File(const Path& filename, const char* mode);
-    ~File(void);
+    ~File();
     
     int close(void);
     int flush(void);
@@ -52,7 +52,7 @@ class File {
 };
 
 class State {
- public:
+public:
     State(void);
     
     static State* GetGlobalState(void);

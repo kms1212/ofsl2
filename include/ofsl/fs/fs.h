@@ -25,31 +25,26 @@ extern "C" {
 #endif
 
 typedef struct {
-    char name[32];
-    size_t max_file_name_length;
-    size_t max_partition_sector_count;
-    uint16_t unicode_supported : 1;
-    uint16_t encryption_supported : 1;
-    uint16_t compression_supported : 1;
-    uint16_t permission_supported : 1;
-} OFSL_FileSystemInfo;
-
-typedef enum {
-    OFSL_FTYPE_UNKNOWN = 0,
-    OFSL_FTYPE_DIRECTORY,
-    OFSL_FTYPE_FILE,
-} OFSL_FileType;
-
-typedef struct {
-    OFSL_FileType type;
+    size_t size;
+    uint16_t directory : 1;
     uint16_t hidden : 1;
     uint16_t system : 1;
+    uint16_t link : 1;
     uint16_t symlink : 1;
     uint16_t compressed : 1;
     uint16_t encrypted : 1;
     uint16_t immutable : 1;
-    uint16_t : 10;
+    uint16_t : 9;
+    OFSL_Time time_created;
+    OFSL_Time time_modified;
+    OFSL_Time time_accessed;
 } OFSL_FileAttribute;
+
+typedef struct {
+    const char* fs_name;
+    const char* vol_name;
+    const char* vol_serial;
+} OFSL_MountInfo;
 
 struct ofsl_fs_ops;
 
@@ -66,12 +61,12 @@ typedef struct {
 typedef struct {
     const struct ofsl_fs_ops* ops;
     OFSL_FileSystem* fs;
-} OFSL_File;
+} OFSL_DirectoryIterator;
 
 typedef struct {
     const struct ofsl_fs_ops* ops;
     OFSL_FileSystem* fs;
-} OFSL_FileInfo;
+} OFSL_File;
 
 struct ofsl_fs_ops {
     const char* (*get_error_string)(OFSL_FileSystem* fs);
@@ -80,24 +75,21 @@ struct ofsl_fs_ops {
     int (*mount)(OFSL_FileSystem* fs);
     int (*unmount)(OFSL_FileSystem* fs);
 
-    const char* (*get_filesystem_name)(OFSL_FileSystem* fs);
+    int (*get_mount_info)(OFSL_FileSystem* fs, OFSL_MountInfo* mntinfo);
 
     int (*dir_create)(OFSL_Directory* parent, const char* name);
     int (*dir_remove)(OFSL_Directory* parent, const char* name);
     OFSL_Directory* (*rootdir_open)(OFSL_FileSystem* fs);
     OFSL_Directory* (*dir_open)(OFSL_Directory* parent, const char* name);
     int (*dir_close)(OFSL_Directory* dir);
-    OFSL_FileInfo* (*dir_list_start)(OFSL_Directory* dir);
-    int (*dir_list_next)(OFSL_FileInfo* finfo);
-    void (*dir_list_end)(OFSL_FileInfo* finfo);
 
-    OFSL_FileInfo* (*get_file_info)(OFSL_Directory* parent, const char* name);
-    const char* (*get_file_name)(const OFSL_FileInfo* finfo);
-    OFSL_FileAttribute (*get_file_attrib)(const OFSL_FileInfo* finfo);
-    ofsl_time_t (*get_file_created_time)(const OFSL_FileInfo* finfo);
-    ofsl_time_t (*get_file_modified_time)(const OFSL_FileInfo* finfo);
-    ofsl_time_t (*get_file_accessed_time)(const OFSL_FileInfo* finfo);
-    ssize_t (*get_file_size)(const OFSL_FileInfo* finfo);
+    OFSL_DirectoryIterator* (*dir_iter_start)(OFSL_Directory* dir);
+    int (*dir_iter_next)(OFSL_DirectoryIterator* it);
+    void (*dir_iter_end)(OFSL_DirectoryIterator* it);
+    const char* (*dir_iter_get_file_name)(const OFSL_DirectoryIterator* it);
+    int (*dir_iter_get_attr)(const OFSL_DirectoryIterator* it, OFSL_FileAttribute* fattr);
+
+    int (*get_file_attr)(OFSL_Directory* parent, const char* name, OFSL_FileAttribute* fattr);
 
     int (*file_create)(OFSL_Directory* parent, const char* name);
     int (*file_remove)(OFSL_Directory* parent, const char* name);
@@ -106,7 +98,6 @@ struct ofsl_fs_ops {
     ssize_t (*file_read)(OFSL_File* file, void* buf, size_t size, size_t count);
     ssize_t (*file_write)(OFSL_File* file, const void* buf, size_t size, size_t count);
     int (*file_seek)(OFSL_File* file, ssize_t offset, int origin);
-    int (*file_flush)(OFSL_File* file);
     ssize_t (*file_tell)(OFSL_File* file);
     int (*file_iseof)(OFSL_File* file);
 };
@@ -132,9 +123,9 @@ static inline int ofsl_fs_unmount(OFSL_FileSystem* fs)
 }
 
 __attribute__((always_inline))
-static inline const char* ofsl_fs_get_filesystem_name(OFSL_FileSystem* fs)
+static inline int ofsl_fs_get_mount_info(OFSL_FileSystem* fs, OFSL_MountInfo* mntinfo)
 {
-    return fs->ops->get_filesystem_name(fs);
+    return fs->ops->get_mount_info(fs, mntinfo);
 }
 
 __attribute__((always_inline))
@@ -168,63 +159,39 @@ static inline int ofsl_dir_close(OFSL_Directory* dir)
 }
 
 __attribute__((always_inline))
-static inline OFSL_FileInfo* ofsl_dir_list_start(OFSL_Directory* dir)
+static inline OFSL_DirectoryIterator* ofsl_dir_iter_start(OFSL_Directory* dir)
 {
-    return dir->ops->dir_list_start(dir);
+    return dir->ops->dir_iter_start(dir);
 }
 
 __attribute__((always_inline))
-static inline int ofsl_dir_list_next(OFSL_FileInfo* finfo)
+static inline int ofsl_dir_iter_next(OFSL_DirectoryIterator* it)
 {
-    return finfo->ops->dir_list_next(finfo);
+    return it->ops->dir_iter_next(it);
 }
 
 __attribute__((always_inline))
-static inline void ofsl_dir_list_end(OFSL_FileInfo* finfo)
+static inline void ofsl_dir_iter_end(OFSL_DirectoryIterator* it)
 {
-    finfo->ops->dir_list_end(finfo);
+    it->ops->dir_iter_end(it);
 }
 
 __attribute__((always_inline))
-static inline OFSL_FileInfo* ofsl_get_file_info(OFSL_Directory* dir, const char* name)
+static inline const char* ofsl_dir_iter_get_file_name(const OFSL_DirectoryIterator* it)
 {
-    return dir->ops->get_file_info(dir, name);
+    return it->ops->dir_iter_get_file_name(it);
 }
 
 __attribute__((always_inline))
-static inline const char* ofsl_get_file_name(const OFSL_FileInfo* finfo)
+static inline int ofsl_dir_iter_get_attr(const OFSL_DirectoryIterator* it, OFSL_FileAttribute* fattr)
 {
-    return finfo->ops->get_file_name(finfo);
+    return it->ops->dir_iter_get_attr(it, fattr);
 }
 
 __attribute__((always_inline))
-static inline OFSL_FileAttribute ofsl_get_file_attrib(const OFSL_FileInfo* finfo)
+static inline int ofsl_get_file_attr(OFSL_Directory* parent, const char* name, OFSL_FileAttribute* fattr)
 {
-    return finfo->ops->get_file_attrib(finfo);
-}
-
-__attribute__((always_inline))
-static inline ofsl_time_t ofsl_get_file_created_time(const OFSL_FileInfo* finfo)
-{
-    return finfo->ops->get_file_created_time(finfo);
-}
-
-__attribute__((always_inline))
-static inline ofsl_time_t ofsl_get_file_modified_time(const OFSL_FileInfo* finfo)
-{
-    return finfo->ops->get_file_modified_time(finfo);
-}
-
-__attribute__((always_inline))
-static inline ofsl_time_t ofsl_get_file_accessed_time(const OFSL_FileInfo* finfo)
-{
-    return finfo->ops->get_file_accessed_time(finfo);
-}
-
-__attribute__((always_inline))
-static inline ssize_t ofsl_get_file_size(const OFSL_FileInfo* finfo)
-{
-    return finfo->ops->get_file_size(finfo);
+    return parent->ops->get_file_attr(parent, name, fattr);
 }
 
 __attribute__((always_inline))
@@ -267,12 +234,6 @@ __attribute__((always_inline))
 static inline int ofsl_file_seek(OFSL_File* file, ssize_t offset, int origin)
 {
     return file->ops->file_seek(file, offset, origin);
-}
-
-__attribute__((always_inline))
-static inline int ofsl_file_flush(OFSL_File* file)
-{
-    return file->ops->file_flush(file);
 }
 
 __attribute__((always_inline))

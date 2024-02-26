@@ -6,7 +6,7 @@
 #include <CUnit/Basic.h>
 
 #include <ofsl/drive/rawimage.h>
-#include <ofsl/ptbl/gpt.h>
+#include <ofsl/partition/gpt.h>
 
 #define TEST_SECTOR_SIZE 512
 
@@ -15,10 +15,10 @@ OFSL_PartitionTable* gpt;
 
 static int init_test_suite(void)
 {
-    drive = ofsl_create_rawimage_drive("tests/data/ptbl/gpt.img", 0, TEST_SECTOR_SIZE, 8192);
+    drive = ofsl_drive_rawimage_create("tests/data/partition/gpt.img", 0, TEST_SECTOR_SIZE);
     assert(drive);
 
-    gpt = ofsl_create_ptbl_gpt(drive);
+    gpt = ofsl_ptbl_gpt_create(drive);
     assert(gpt);
     return 0;
 }
@@ -42,16 +42,16 @@ static void test_part_listing(void)
         },
     };
 
-    OFSL_PartitionInfo* pinfo = ofsl_ptbl_list_start(gpt);
-    CU_ASSERT_PTR_NOT_NULL_FATAL(pinfo);
+    OFSL_Partition* part = ofsl_ptbl_list_start(gpt);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(part);
 
-    for (int i = 0; !ofsl_ptbl_list_next(pinfo); i++) {
-        CU_ASSERT_EQUAL(strncmp(ofsl_get_part_name(pinfo), part_data[i].name, 36), 0);
-        CU_ASSERT_EQUAL(ofsl_get_part_lba_start(pinfo), part_data[i].lba_start);
-        CU_ASSERT_EQUAL(ofsl_get_part_lba_end(pinfo), part_data[i].lba_end);
+    for (int i = 0; !ofsl_ptbl_list_next(part); i++) {
+        CU_ASSERT_EQUAL(strncmp(part->part_name, part_data[i].name, 36), 0);
+        CU_ASSERT_EQUAL(part->lba_start, part_data[i].lba_start);
+        CU_ASSERT_EQUAL(part->lba_end, part_data[i].lba_end);
     }
 
-    ofsl_ptbl_list_end(pinfo);
+    ofsl_ptbl_list_end(part);
 }
 
 static int clean_test_suite(void)
