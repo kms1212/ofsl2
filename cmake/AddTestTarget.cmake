@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
 
-include (CTest)
-
 find_package(PkgConfig)
 pkg_check_modules(CUnit REQUIRED cunit)
 
