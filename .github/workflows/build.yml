@@ -38,7 +38,7 @@ jobs:
     - name: Install prerequisites
       uses: awalsh128/cache-apt-pkgs-action@latest
       with:
-        packages: cunit zlib1g-dev
+        packages: zlib1g-dev libcunit1 libcunit1-dev
         version: 1.0
 
     - name: Configure CMake
