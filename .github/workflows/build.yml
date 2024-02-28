@@ -38,8 +38,8 @@ jobs:
     - name: Install prerequisites
       uses: awalsh128/cache-apt-pkgs-action@latest
       with:
-        packages: zlib1g-dev libcunit1 libcunit1-dev
-        version: 1.0
+        packages: zlib1g-dev libcunit1 libcunit1-dev mtools xorriso
+        version: 1.2
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
