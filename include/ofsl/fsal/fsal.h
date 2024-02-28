@@ -23,8 +23,9 @@ typedef struct {
 const char* fsal_register_drive(OFSL_Drive* drv, const char* drvtype);
 void fsal_unregister_drive(const char* id);
 
-int fsal_mount_fs(const char* id);
-int fsal_unmount_fs(const char* id);
+int fsal_mount(const char* id);
+int fsal_mountfs(OFSL_FileSystem* fs, const char* id);
+int fsal_unmount(const char* id);
 
 typedef struct {
     int a;

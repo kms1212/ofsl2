@@ -1,0 +1,6 @@
+#ifndef FS_FAT_CONFIG_H__
+#define FS_FAT_CONFIG_H__
+
+#cmakedefine BUILD_FILESYSTEM_FAT_LFN
+
+#endif

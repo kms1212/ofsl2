@@ -10,7 +10,9 @@ extern "C" {
 #endif
 
 struct ofsl_fs_iso9660_option {
-    uint8_t enable_rock_ridge_ext : 1;
+    unsigned int diskbuf_count;
+    uint8_t case_sensitive : 1;
+    uint8_t enable_rock_ridge : 1;
     uint8_t enable_joilet : 1;
 };
 
@@ -29,7 +31,7 @@ struct ofsl_fs_iso9660_vol_info {
     OFSL_Time time_effective;
 };
 
-OFSL_FileSystem* ofsl_fs_iso9660_create(OFSL_Partition* part, unsigned int vol_set_idx);
+OFSL_FileSystem* ofsl_fs_iso9660_create(OFSL_Partition* part);
 
 struct ofsl_fs_iso9660_option* ofsl_fs_iso9660_get_option(OFSL_FileSystem* fs);
 

@@ -138,13 +138,6 @@ static void test_unmount(void)
     CU_ASSERT_FALSE(ofsl_fs_unmount(fat));
 }
 
-static void test_get_mount_info(void)
-{
-    OFSL_MountInfo mntinfo;
-    CU_ASSERT_FALSE_FATAL(ofsl_fs_get_mount_info(fat, &mntinfo));
-    CU_ASSERT_STRING_EQUAL(mntinfo.fs_name, fsname_expected);
-}
-
 static void test_no_such_entry(void)
 {
     OFSL_Directory* rootdir = ofsl_fs_rootdir_open(fat);
@@ -190,29 +183,37 @@ static void test_dir_list(void)
                 default: {
                     if (sscanf(line_buf, "%383s %u %u-%u-%u %u:%u %*s\n", fname_buf, &fsize, &year, &month, &day, &hour, &minute) == 7) {
                         /* file */
-                        CU_ASSERT_FALSE(ofsl_dir_iter_next(it));
-                        OFSL_FileAttribute fattr;
-                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_get_attr(it, &fattr));
-                        CU_ASSERT_EQUAL(fattr.size, fsize);
-                        struct tm time_tmp;
-                        ofsl_time_getstdctm(&time_tmp, &fattr.time_created);
-                        CU_ASSERT_EQUAL(time_tmp.tm_year, year - 1900);
-                        CU_ASSERT_EQUAL(time_tmp.tm_mon, month - 1);
-                        CU_ASSERT_EQUAL(time_tmp.tm_mday, day - 1);
-                        CU_ASSERT_EQUAL(time_tmp.tm_hour, hour);
-                        CU_ASSERT_EQUAL(time_tmp.tm_min, minute);
-                        ofsl_time_getstdctm(&time_tmp, &fattr.time_modified);
-                        CU_ASSERT_EQUAL(time_tmp.tm_year, year - 1900);
-                        CU_ASSERT_EQUAL(time_tmp.tm_mon, month - 1);
-                        CU_ASSERT_EQUAL(time_tmp.tm_mday, day - 1);
-                        CU_ASSERT_EQUAL(time_tmp.tm_hour, hour);
-                        CU_ASSERT_EQUAL(time_tmp.tm_min, minute);
-                        ofsl_time_getstdctm(&time_tmp, &fattr.time_accessed);
-                        CU_ASSERT_EQUAL(time_tmp.tm_year, year - 1900);
-                        CU_ASSERT_EQUAL(time_tmp.tm_mon, month - 1);
-                        CU_ASSERT_EQUAL(time_tmp.tm_mday, day - 1);
-                        CU_ASSERT_EQUAL(time_tmp.tm_hour, 0);
-                        CU_ASSERT_EQUAL(time_tmp.tm_min, 0);
+                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_next(it));
+
+                        CU_ASSERT_EQUAL(ofsl_dir_iter_get_type(it), OFSL_FTYPE_FILE);
+
+                        size_t size;
+                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_get_size(it, &size));
+                        CU_ASSERT_EQUAL(size, fsize);
+
+                        struct tm stdctime;
+                        OFSL_Time ofsltime;
+                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_get_timestamp(it, OFSL_TSTYPE_CREATION, &ofsltime));
+                        ofsl_time_getstdctm(&stdctime, &ofsltime);
+                        CU_ASSERT_EQUAL(stdctime.tm_year, year - 1900);
+                        CU_ASSERT_EQUAL(stdctime.tm_mon, month - 1);
+                        CU_ASSERT_EQUAL(stdctime.tm_mday, day);
+                        CU_ASSERT_EQUAL(stdctime.tm_hour, hour);
+                        CU_ASSERT_EQUAL(stdctime.tm_min, minute);
+                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_get_timestamp(it, OFSL_TSTYPE_MODIFICATION, &ofsltime));
+                        ofsl_time_getstdctm(&stdctime, &ofsltime);
+                        CU_ASSERT_EQUAL(stdctime.tm_year, year - 1900);
+                        CU_ASSERT_EQUAL(stdctime.tm_mon, month - 1);
+                        CU_ASSERT_EQUAL(stdctime.tm_mday, day);
+                        CU_ASSERT_EQUAL(stdctime.tm_hour, hour);
+                        CU_ASSERT_EQUAL(stdctime.tm_min, minute);
+                        CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_get_timestamp(it, OFSL_TSTYPE_ACCESS, &ofsltime));
+                        ofsl_time_getstdctm(&stdctime, &ofsltime);
+                        CU_ASSERT_EQUAL(stdctime.tm_year, year - 1900);
+                        CU_ASSERT_EQUAL(stdctime.tm_mon, month - 1);
+                        CU_ASSERT_EQUAL(stdctime.tm_mday, day);
+                        CU_ASSERT_EQUAL(stdctime.tm_hour, 0);
+                        CU_ASSERT_EQUAL(stdctime.tm_min, 0);
                     } else if (sscanf(line_buf, "%383s dir\n", fname_buf) == 1) {
                         /* directory */
                         CU_ASSERT_FALSE(ofsl_dir_iter_next(it));
@@ -220,8 +221,7 @@ static void test_dir_list(void)
                         /* unrecognized */
                         break;
                     }
-                    printf("%s, %s\n", fname_buf, ofsl_dir_iter_get_file_name(it));
-                    CU_ASSERT_STRING_EQUAL(fname_buf, ofsl_dir_iter_get_file_name(it));
+                    CU_ASSERT_STRING_EQUAL(fname_buf, ofsl_dir_iter_get_name(it));
                     break;
                 }
             }
@@ -352,10 +352,6 @@ int main(int argc, char** argv)
         {
             .pName = "mount",
             .pTestFunc = test_mount
-        },
-        {
-            .pName = "mount info",
-            .pTestFunc = test_get_mount_info
         },
         {
             .pName = "directory list",

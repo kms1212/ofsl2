@@ -2,11 +2,14 @@
 
 #include <ofsl/partition/errmsg.h>
 
+#include "config.h"
+
 static const char* error_str_list[] = {
     "Operation successfully finished",
     "No such partition entry",
 };
 
+OFSL_EXPORT
 const char* ofsl_ptbl_get_error_string(OFSL_PartitionTable* pt)
 {
     if (pt->error >= 0) {
@@ -20,6 +23,7 @@ const char* ofsl_ptbl_get_error_string(OFSL_PartitionTable* pt)
     }
 }
 
+OFSL_EXPORT
 int ofsl_partition_from_drive(OFSL_Partition* part, OFSL_Drive* drive)
 {
     part->drv = drive;

@@ -16,3 +16,17 @@ set(CMAKE_REQUIRED_INCLUDES "")
 set(CMAKE_EXTRA_INCLUDE_FILES "")
 
 target_sources(openfsl2 PRIVATE fat.c)
+
+# extensions
+set(KNOWN_FILESYSTEM_FAT_EXTENSIONS LFN)
+set(BUILD_FILESYSTEM_FAT_EXTENSIONS LFN CACHE STRING "FAT Extensions to Build")
+
+foreach(extension IN LISTS BUILD_FILESYSTEM_FAT_EXTENSIONS)
+    if (${extension} IN_LIST KNOWN_FILESYSTEM_FAT_EXTENSIONS)
+        set(BUILD_FILESYSTEM_FAT_${extension} 1)
+    else()
+        message(FATAL_ERROR "Invalid extension name for FAT")
+    endif()
+endforeach()
+
+configure_file("config.h.in" "config.h")

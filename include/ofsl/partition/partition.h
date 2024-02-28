@@ -3,6 +3,7 @@
 
 #include <ofsl/partition/errmsg.h>
 #include <ofsl/drive/drive.h>
+#include <ofsl/conf.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,24 +37,24 @@ struct ofsl_ptbl_ops {
 
 const char* ofsl_ptbl_get_error_string(OFSL_PartitionTable* pt);
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline void ofsl_ptbl_delete(OFSL_PartitionTable* pt)
 {
     pt->ops->_delete(pt);
 }
-__attribute__((always_inline))
+OFSL_INLINE
 static inline OFSL_Partition* ofsl_ptbl_list_start(OFSL_PartitionTable* pt)
 {
     return pt->ops->list_start(pt);
 }
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline int ofsl_ptbl_list_next(OFSL_Partition* pinfo)
 {
     return pinfo->pt->ops->list_next(pinfo);
 }
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline void ofsl_ptbl_list_end(OFSL_Partition* pinfo)
 {
     pinfo->pt->ops->list_end(pinfo);

@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "config.h"
+
 struct drive_rawimage {
     OFSL_Drive drv;
     FILE* fp;
@@ -69,6 +71,7 @@ static void _delete(OFSL_Drive* drv_opaque)
     free(drv);
 }
 
+OFSL_EXPORT
 OFSL_Drive* ofsl_drive_rawimage_create(const char* name, int readonly, size_t sector_size)
 {
     static const struct ofsl_drive_ops drvops = {

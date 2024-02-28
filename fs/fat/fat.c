@@ -8,23 +8,15 @@
 #include <ofsl/drive/drive.h>
 #include <ofsl/time.h>
 
-#include "src/endian.h"
+#include "endian.h"
+#include "fs/fat/config.h"
 #include "fs/fat/internal.h"
 #include "fs/fat/defaults.h"
-#include "fs/internal.h"
 
 #define DISKBUF_TYPE_SECTOR     0
 #define DISKBUF_TYPE_CLUSTER    1
 
 #define USAGE_TAG_MAX           8191
-
-enum error_fat {
-    FATE_IDBENT = -1,
-};
-
-static const char* error_str_list[] = {
-    "Invalid disk buffer entry",
-};
 
 struct diskbuf_entry {
     uint16_t type : 1;
@@ -38,10 +30,20 @@ struct diskbuf_entry {
     uint8_t data[];
 };
 
+enum error_fat {
+    FATE_IDBENT = -1,
+};
+
+static const char* error_str_list[] = {
+    "Invalid disk buffer entry",
+};
+
 struct fs_fat {
     OFSL_FileSystem fs;
     OFSL_Partition part;
     struct diskbuf_entry** diskbuf;
+    char        volume_label[FAT_FILENAME_BUF_LEN];
+    uint32_t    volume_serial;
     uint16_t    reserved_sectors;
     uint16_t    sector_size;
     uint32_t    cluster_size;
@@ -83,13 +85,13 @@ struct dirit_fat {
     uint32_t current_cluster_idx;
     uint8_t current_entry_idx;
     int valid;
-    char filename[FAT_LFN_U8_BUFLEN];
+    char filename[FAT_FILENAME_BUF_LEN];
     struct fat_direntry_file direntry;
 };
 
 static int read_fat(struct fs_fat* fs, unsigned int* entry_idx, uint32_t sector_idx);
 static int file_iseof(OFSL_File* file_opaque);
-static int match_name(OFSL_Directory* parent_opaque, const char* name, struct fat_direntry_file* direntry_buf);
+static int match_name(struct dir_fat* parent, const char* name, struct fat_direntry_file* direntry_buf);
 
 static struct fs_fat* check_fs_mounted(OFSL_FileSystem* fs_opaque)
 {
@@ -579,6 +581,7 @@ static int validate_sfn(const char* str, size_t len)
     return 1;
 }
 
+#ifdef BUILD_FILESYSTEM_FAT_LFN
 static int validate_lfn(const char* str, size_t len)
 {
     /*  Characters Not Allowed:
@@ -684,6 +687,8 @@ static size_t lfn_ucs2_to_utf8(char utf8buf[static FAT_LFN_U8_BUFLEN], const uin
     return bytes_written;
 }
 
+#endif
+
 static size_t get_sfn_filename(const struct fat_direntry_file* entry, char buf[static FAT_SFN_BUFLEN], int lowercase)
 {
     size_t char_count = 0;
@@ -725,7 +730,7 @@ static int mount(OFSL_FileSystem* fs_opaque)
 {
     struct fs_fat* fs = (struct fs_fat*)fs_opaque;
 
-    fs->diskbuf = malloc(sizeof(struct diskbuf_entry*) * fs->options.diskbuf_count);
+    fs->diskbuf = calloc(fs->options.diskbuf_count, sizeof(struct diskbuf_entry*));
 
     fs->sector_size = 512;
 
@@ -788,10 +793,10 @@ static int unmount(OFSL_FileSystem* fs_opaque)
     return 0;
 }
 
-static int get_mount_info(OFSL_FileSystem* fs_opaque, OFSL_MountInfo* mntinfo)
+static const char* get_fs_name(OFSL_FileSystem* fs_opaque)
 {
     struct fs_fat* fs = check_fs_mounted(fs_opaque);
-    if (!fs) return 1;
+    if (!fs) return NULL;
 
     static const char* const fat_name[] = {
         "UNKNOWN",
@@ -800,17 +805,17 @@ static int get_mount_info(OFSL_FileSystem* fs_opaque, OFSL_MountInfo* mntinfo)
         "FAT32",
     };
 
-    static const size_t fat_max_part_sect_cnt[] = {
-        0,
+    return fat_name[fs->fat_type];
+}
 
-    };
+static int get_volume_string(OFSL_FileSystem* fs_opaque, OFSL_VolumeStringType type, char* buf, size_t len)
+{
+    return -1;
+}
 
-    _ofsl_fs_mntinfo_init(mntinfo);
-    mntinfo->fs_name = fat_name[fs->fat_type];
-    mntinfo->vol_name = NULL;
-    mntinfo->vol_serial = NULL;
-
-    return 0;
+static int get_volume_timestamp(OFSL_FileSystem* fs_opaque, OFSL_TimestampType type, OFSL_Time* time)
+{
+    return -1;
 }
 
 static int dir_create(OFSL_Directory* dir, const char* name)
@@ -846,7 +851,7 @@ static OFSL_Directory* dir_open(OFSL_Directory* parent_opaque, const char* name)
     if (!fs) return NULL;
 
     struct fat_direntry_file dirent;
-    if (!match_name((OFSL_Directory*)parent, name, &dirent)) {
+    if (!match_name(parent, name, &dirent)) {
         fs->fs.error = OFSL_FSE_NOENT;
         return NULL;
     }
@@ -857,7 +862,7 @@ static OFSL_Directory* dir_open(OFSL_Directory* parent_opaque, const char* name)
 
     struct dir_fat* dir = malloc(sizeof(struct dir_fat));
     dir->dir.ops = fs->fs.ops;
-    dir->dir.fs = (OFSL_FileSystem*)fs;
+    dir->dir.fs = parent->dir.fs;
     dir->head_cluster = head_cluster;
     dir->parent = parent;
     memcpy(&dir->direntry, &dirent, sizeof(dirent));
@@ -912,8 +917,11 @@ static int dir_iter_next(OFSL_DirectoryIterator* it_opaque)
         fs->fat_type != FAT_TYPE_FAT32 && dir->head_cluster == 0 ?
             fs->sector_size / sizeof(union fat_dir_entry) :
             fs->cluster_size / sizeof(union fat_dir_entry);
+#ifdef BUILD_FILESYSTEM_FAT_LFN
     uint16_t lfn_ucs2_buf[FAT_LFN_BUFLEN];
     int is_lfn = 0;
+
+#endif
 
     unsigned int diskbuf_entry_idx;
     while (1) {
@@ -938,19 +946,30 @@ static int dir_iter_next(OFSL_DirectoryIterator* it_opaque)
                 continue;
             } else if ((entries[it->current_entry_idx].file.attribute & FAT_ATTR_LFNENTRY) == FAT_ATTR_LFNENTRY) {
                 // if current entry is LFN entry
+#ifdef BUILD_FILESYSTEM_FAT_LFN
                 if (fs->options.lfn_enabled) {
                     // write to buffer if LFN is enabled
                     get_lfn_filename(&entries[it->current_entry_idx].lfn, lfn_ucs2_buf);
                     is_lfn = 1;
                 }  // otherwise skip
+
+#endif
+                continue;
+            } else if ((entries[it->current_entry_idx].file.attribute & FAT_ATTR_VOLUME_ID) == FAT_ATTR_VOLUME_ID) {
+                /* skip if file entry is volume id */
+#ifdef BUILD_FILESYSTEM_FAT_LFN
+                is_lfn = 0;
+
+#endif
                 continue;
             }
 
-            if (is_lfn) {
+#ifdef BUILD_FILESYSTEM_FAT_LFN
+            if (is_lfn)
                 lfn_ucs2_to_utf8(it->filename, lfn_ucs2_buf, fs->options.unicode_enabled, fs->options.unknown_char_fallback);
-            } else {
+            else
+#endif
                 get_sfn_filename(&entries[it->current_entry_idx].file, it->filename, fs->options.sfn_lowercase);
-            }
             memcpy(&it->direntry, &entries[it->current_entry_idx], sizeof(struct fat_direntry_file));
             it->current_entry_idx++;
             return 0;
@@ -966,82 +985,84 @@ static void dir_iter_end(OFSL_DirectoryIterator* it_opaque)
     free(it_opaque);
 }
 
-static const char* dir_iter_get_file_name(const OFSL_DirectoryIterator* it_opaque)
+static const char* dir_iter_get_name(OFSL_DirectoryIterator* it_opaque)
 {
     const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+    if (!it) return NULL;
     return it->filename;
 }
 
-static int dirent_to_fattr(OFSL_FileAttribute* fattr, const struct fat_direntry_file* dirent)
+static OFSL_FileType dir_iter_get_type(OFSL_DirectoryIterator* it_opaque)
 {
-    memset(fattr, 0, sizeof(*fattr));
+    const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+    if (!it) return OFSL_FTYPE_ERROR;
+    return (it->direntry.attribute & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY ? OFSL_FTYPE_DIR : OFSL_FTYPE_FILE;
+}
 
-    fattr->size       = dirent->size;
-    fattr->directory  = (dirent->attribute & FAT_ATTR_DIRECTORY) == FAT_ATTR_DIRECTORY;
-    fattr->immutable  = (dirent->attribute & FAT_ATTR_READ_ONLY) == FAT_ATTR_READ_ONLY;
-    fattr->hidden     = (dirent->attribute & FAT_ATTR_HIDDEN) == FAT_ATTR_HIDDEN;
-    fattr->system     = (dirent->attribute & FAT_ATTR_SYSTEM) == FAT_ATTR_SYSTEM;
-    fattr->compressed = 0;
-    fattr->encrypted  = 0;
-    fattr->link       = 0;
-    fattr->symlink    = 0;
+static int dir_iter_get_timestamp(OFSL_DirectoryIterator* it_opaque, OFSL_TimestampType type, OFSL_Time* time)
+{
+    const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+    if (!it) return 1;
 
     struct tm tm;
-    tm.tm_sec  = dirent->created_time.second_div2 << 1;
-    tm.tm_sec += dirent->created_tenth / 10;
-    tm.tm_min  = dirent->created_time.minute;
-    tm.tm_hour = dirent->created_time.hour;
-    tm.tm_mday = dirent->created_date.day - 1;
-    tm.tm_mon  = dirent->created_date.month - 1;
-    tm.tm_year = dirent->created_date.year + 80;
-    ofsl_time_fromstdctm(&fattr->time_created, &tm);
 
-    tm.tm_sec  = dirent->modified_time.second_div2 << 1;
-    tm.tm_min  = dirent->modified_time.minute;
-    tm.tm_hour = dirent->modified_time.hour;
-    tm.tm_mday = dirent->modified_date.day - 1;
-    tm.tm_mon  = dirent->modified_date.month - 1;
-    tm.tm_year = dirent->modified_date.year + 80;
-    ofsl_time_fromstdctm(&fattr->time_modified, &tm);
+    switch (type) {
+        case OFSL_TSTYPE_CREATION:
+            tm.tm_sec  = it->direntry.created_time.second_div2 << 1;
+            tm.tm_sec += it->direntry.created_tenth / 10;
+            tm.tm_min  = it->direntry.created_time.minute;
+            tm.tm_hour = it->direntry.created_time.hour;
+            tm.tm_mday = it->direntry.created_date.day;
+            tm.tm_mon  = it->direntry.created_date.month - 1;
+            tm.tm_year = it->direntry.created_date.year + 80;
+            break;
+        case OFSL_TSTYPE_MODIFICATION:
+            tm.tm_sec  = it->direntry.modified_time.second_div2 << 1;
+            tm.tm_min  = it->direntry.modified_time.minute;
+            tm.tm_hour = it->direntry.modified_time.hour;
+            tm.tm_mday = it->direntry.modified_date.day;
+            tm.tm_mon  = it->direntry.modified_date.month - 1;
+            tm.tm_year = it->direntry.modified_date.year + 80;
+            break;
+        case OFSL_TSTYPE_ACCESS:
+            tm.tm_sec  = 0;
+            tm.tm_min  = 0;
+            tm.tm_hour = 0;
+            tm.tm_mday = it->direntry.accessed_date.day;
+            tm.tm_mon  = it->direntry.accessed_date.month - 1;
+            tm.tm_year = it->direntry.accessed_date.year + 80;
+            break;
+        default:
+            return 1;
+    }
+    ofsl_time_fromstdctm(time, &tm);
 
-    tm.tm_sec  = 0;
-    tm.tm_min  = 0;
-    tm.tm_hour = 0;
-    tm.tm_mday = dirent->accessed_date.day - 1;
-    tm.tm_mon  = dirent->accessed_date.month - 1;
-    tm.tm_year = dirent->accessed_date.year + 80;
-    ofsl_time_fromstdctm(&fattr->time_accessed, &tm);
     return 0;
 }
 
-static int dir_iter_get_attr(const OFSL_DirectoryIterator* it_opaque, OFSL_FileAttribute* fattr)
+static int dir_iter_get_attr(OFSL_DirectoryIterator* it_opaque, OFSL_FileAttributeType type)
 {
     const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+    if (!it) return -1;
 
-    return dirent_to_fattr(fattr, &it->direntry);
+    switch (type) {
+        case OFSL_FATYPE_READONLY:
+            return (it->direntry.attribute & FAT_ATTR_READ_ONLY) == FAT_ATTR_READ_ONLY ? 1 : 0;
+        case OFSL_FATYPE_SYSTEM:
+            return (it->direntry.attribute & FAT_ATTR_SYSTEM) == FAT_ATTR_SYSTEM ? 1 : 0;
+        case OFSL_FATYPE_HIDDEN:
+            return (it->direntry.attribute & FAT_ATTR_HIDDEN) == FAT_ATTR_HIDDEN ? 1 : 0;
+        default:
+            return -1;
+    }
 }
 
-static int get_file_attr(OFSL_Directory* parent_opaque, const char* name, OFSL_FileAttribute* fattr)
+static int dir_iter_get_size(OFSL_DirectoryIterator* it_opaque, size_t* size)
 {
-    const struct dir_fat* parent = check_dir(parent_opaque);
-    if (!parent) {
-        return 1;
-    }
-    struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
-    if (!fs) {
-        return 1;
-    }
+    const struct dirit_fat* it = (const struct dirit_fat*)it_opaque;
+    if (!it) return 1;
 
-    struct fat_direntry_file dirent;
-    if (!match_name((OFSL_Directory*)parent, name, &dirent)) {
-        fs->fs.error = OFSL_FSE_NOENT;
-        return 1;
-    }
-
-    if (dirent_to_fattr(fattr, &dirent)) {
-        return 1;
-    }
-    
+    *size = it->direntry.size;
     return 0;
 }
 
@@ -1055,15 +1076,12 @@ static int file_remove(OFSL_Directory* path, const char* name)
     return -1;
 }
 
-static int match_name(OFSL_Directory* parent_opaque, const char* name, struct fat_direntry_file* direntry_buf)
+static int match_name(struct dir_fat* parent, const char* name, struct fat_direntry_file* direntry_buf)
 {
-    struct dir_fat* parent = check_dir(parent_opaque);
-    if (!parent) {
-        return 0;
-    }
+    if (!parent) return 0;
     struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
 
-    struct dirit_fat* it = (struct dirit_fat*)dir_iter_start(parent_opaque);
+    struct dirit_fat* it = (struct dirit_fat*)dir_iter_start((OFSL_Directory*)parent);
     while (!dir_iter_next((OFSL_DirectoryIterator*)it)) {
         if (fs->options.case_sensitive) {
             if (strncmp(name, it->filename, sizeof(it->filename)) == 0) {
@@ -1086,16 +1104,12 @@ static int match_name(OFSL_Directory* parent_opaque, const char* name, struct fa
 static OFSL_File* file_open(OFSL_Directory* parent_opaque, const char* name, const char* mode)
 {
     struct dir_fat* parent = check_dir(parent_opaque);
-    if (!parent) {
-        return NULL;
-    }
+    if (!parent) return NULL;
     struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
-    if (!fs) {
-        return NULL;
-    }
+    if (!fs) return NULL;
 
     struct fat_direntry_file dirent;
-    if (!match_name((OFSL_Directory*)parent, name, &dirent)) {
+    if (!match_name(parent, name, &dirent)) {
         fs->fs.error = OFSL_FSE_NOENT;
         return NULL;
     }
@@ -1106,7 +1120,7 @@ static OFSL_File* file_open(OFSL_Directory* parent_opaque, const char* name, con
 
     struct file_fat* file = malloc(sizeof(struct file_fat));
     file->file.ops = fs->fs.ops;
-    file->file.fs = (OFSL_FileSystem*)fs;
+    file->file.fs = parent->dir.fs;
     file->head_cluster = head_cluster;
     file->parent = parent;
     file->cursor = 0;
@@ -1120,13 +1134,9 @@ static OFSL_File* file_open(OFSL_Directory* parent_opaque, const char* name, con
 static int file_close(OFSL_File* file_opaque)
 {
     struct file_fat* file = check_file(file_opaque);
-    if (!file) {
-        return 1;
-    }
+    if (!file) return 1;
     struct dir_fat* parent = file->parent;
-    if (!parent) {
-        return 1;
-    }
+    if (!parent) return 1;
 
     parent->child_count--;
 
@@ -1137,15 +1147,12 @@ static int file_close(OFSL_File* file_opaque)
 static ssize_t file_read(OFSL_File* file_opaque, void* buf, size_t size, size_t count)
 {
     struct file_fat* file = check_file(file_opaque);
+    if (!file) return 1;
     struct fs_fat* fs = check_fs_mounted(file->file.fs);
+    if (!fs) return 1;
     struct fat_direntry_file* entry = &file->direntry;
-    if (!file || !fs) {
-        return -1;
-    }
 
-    if (file_iseof((OFSL_File*)file)) {
-        return -1;
-    }
+    if (file_iseof((OFSL_File*)file)) return -1;
 
     uint8_t* bbuf = buf;
 
@@ -1196,32 +1203,24 @@ static ssize_t file_write(OFSL_File* file, const void* buf, size_t size, size_t 
 static int file_seek(OFSL_File* file_opaque, ssize_t offset, int origin)
 {
     struct file_fat* file = check_file(file_opaque);
-    if (!file) {
-        return 1;
-    }
+    if (!file) return 1;
     struct fat_direntry_file* entry = &file->direntry;
 
     switch (origin) {
         case SEEK_SET:
-            if (offset > entry->size || offset < 0) {
-                return -1;
-            } else {
-                file->cursor = offset;
-            }
+            if ((offset > entry->size) ||
+                (offset < 0)) return 1;
+            file->cursor = offset;
             break;
         case SEEK_CUR:
-            if (offset + file->cursor > entry->size || offset + file->cursor < 0) {
-                return -1;
-            } else {
-                file->cursor += offset;
-            }
+            if ((offset + file->cursor > entry->size) ||
+            offset + file->cursor < 0)  return 1;
+            file->cursor += offset;
             break;
         case SEEK_END:
-            if (offset > 0 || offset + file->cursor < 0) {
-                return -1;
-            } else {
-                file->cursor = entry->size + offset;
-            }
+            if ((offset > 0) ||
+                (offset + entry->size < 0)) return 1;
+            file->cursor = entry->size + offset;
             break;
         default:
             return 1;
@@ -1229,32 +1228,20 @@ static int file_seek(OFSL_File* file_opaque, ssize_t offset, int origin)
     return 0;
 }
 
-static int file_flush(OFSL_File* file_opaque)
-{
-    return -1;
-}
-
 static ssize_t file_tell(OFSL_File* file_opaque)
 {
     struct file_fat* file = check_file(file_opaque);
-    if (!file) {
-        return -1;
-    }
+    if (!file) return -1;
     struct fat_direntry_file* entry = &file->direntry;
 
-    if (file->cursor < 0 || file->cursor > entry->size) {
-        return -1;
-    } else {
-        return file->cursor;
-    }
+    if (file->cursor < 0 || file->cursor > entry->size) return -1;
+    return file->cursor;
 }
 
 static int file_iseof(OFSL_File* file_opaque)
 {
     struct file_fat* file = check_file(file_opaque);
-    if (!file) {
-        return -1;
-    }
+    if (!file) return -1;
     struct fat_direntry_file* entry = &file->direntry;
     return file->cursor >= entry->size;
 }
@@ -1266,6 +1253,7 @@ static void _delete(OFSL_FileSystem* fs_opaque)
     free(fs);
 }
 
+OFSL_EXPORT
 OFSL_FileSystem* ofsl_fs_fat_create(OFSL_Partition* part)
 {
     static const struct ofsl_fs_ops fsops = {
@@ -1273,7 +1261,9 @@ OFSL_FileSystem* ofsl_fs_fat_create(OFSL_Partition* part)
         ._delete = _delete,
         .mount = mount,
         .unmount = unmount,
-        .get_mount_info = get_mount_info,
+        .get_fs_name = get_fs_name,
+        .get_volume_string = get_volume_string,
+        .get_volume_timestamp = get_volume_timestamp,
         .dir_create = dir_create,
         .dir_remove = dir_remove,
         .rootdir_open = rootdir_open,
@@ -1282,9 +1272,11 @@ OFSL_FileSystem* ofsl_fs_fat_create(OFSL_Partition* part)
         .dir_iter_start = dir_iter_start,
         .dir_iter_next = dir_iter_next,
         .dir_iter_end = dir_iter_end,
-        .dir_iter_get_file_name = dir_iter_get_file_name,
+        .dir_iter_get_name = dir_iter_get_name,
+        .dir_iter_get_type = dir_iter_get_type,
+        .dir_iter_get_timestamp = dir_iter_get_timestamp,
         .dir_iter_get_attr = dir_iter_get_attr,
-        .get_file_attr = get_file_attr,
+        .dir_iter_get_size = dir_iter_get_size,
         .file_create = file_create,
         .file_remove = file_remove,
         .file_open = file_open,

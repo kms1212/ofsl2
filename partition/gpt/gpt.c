@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config.h"
 #include "partition/gpt/internal.h"
 #include "crypto/crc32.h"
 
@@ -116,6 +117,7 @@ static void list_end(OFSL_Partition* pinfo)
     free(pinfo);
 }
 
+OFSL_EXPORT
 OFSL_PartitionTable* ofsl_ptbl_gpt_create(OFSL_Drive* drv)
 {
     static const struct ofsl_ptbl_ops ptops = {
@@ -143,7 +145,7 @@ OFSL_PartitionTable* ofsl_ptbl_gpt_create(OFSL_Drive* drv)
     }
     uint32_t original_crc32 = gpthdr->header_crc32;
     gpthdr->header_crc32 = 0;
-    if (original_crc32 != ofsl_gen_crc32(0, gpthdr, 0x5c)) {
+    if (original_crc32 != _gen_crc32(0, gpthdr, 0x5c)) {
         return NULL;
     }
 

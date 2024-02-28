@@ -14,7 +14,7 @@
 namespace ofsl {
 
 typedef OFSL_MountInfo MountInfo;
-typedef OFSL_FileAttribute FileAttribute;
+typedef OFSL_FileAttributeType FileAttributeType;
 
 class FileSystem {
 

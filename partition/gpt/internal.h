@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "config.h"
+
 #define MBR_PTYPE_GPT 0xEE
 
 struct mbr_part_entry {
@@ -12,13 +14,13 @@ struct mbr_part_entry {
     uint8_t chs_end[3];
     uint32_t lba_start;
     uint32_t lba_size;
-} __attribute__((packed));
+} OFSL_PACKED;
 
 struct mbr_table_sector {
     uint8_t boot_code[446];
     struct mbr_part_entry partition_entry[4];
     uint16_t signature;
-} __attribute__((packed));
+} OFSL_PACKED;
 
 struct gpt_table_header {
     char signature[8];
@@ -36,7 +38,7 @@ struct gpt_table_header {
     uint32_t part_entry_size;
     uint32_t part_entry_crc32;
     uint8_t __reserved2[420];
-} __attribute__((packed));
+} OFSL_PACKED;
 
 struct gpt_part_entry {
     uint8_t type_guid[16];
@@ -45,6 +47,6 @@ struct gpt_part_entry {
     uint64_t lba_end;
     uint64_t flags;
     uint16_t name[36];
-} __attribute__((packed));
+} OFSL_PACKED;
 
 #endif

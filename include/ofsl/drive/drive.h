@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#include <ofsl/conf.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,25 +35,25 @@ struct ofsl_drive_ops {
     ssize_t (*write_sector)(OFSL_Drive* drv, const void* buf, lba_t lba, size_t sector_size, size_t cnt);
 };
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline void ofsl_drive_delete(OFSL_Drive* drv)
 {
     drv->ops->_delete(drv);
 }
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline int ofsl_drive_update_info(OFSL_Drive* drv)
 {
     return drv->ops->update_info(drv);
 }
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline ssize_t ofsl_drive_read_sector(OFSL_Drive* drv, void* buf, lba_t lba, size_t sector_size, size_t cnt)
 {
     return drv->ops->read_sector(drv, buf, lba, sector_size, cnt);
 }
 
-__attribute__((always_inline))
+OFSL_INLINE
 static inline ssize_t ofsl_drive_write_sector(OFSL_Drive* drv, const void* buf, lba_t lba, size_t sector_size, size_t cnt)
 {
     return drv->ops->write_sector(drv, buf, lba, sector_size, cnt);

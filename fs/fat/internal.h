@@ -5,6 +5,9 @@
 
 #include <ofsl/fs/fat.h>
 
+#include "config.h"
+#include "fs/fat/config.h"
+
 #define FAT_TYPE_UNKNOWN    0
 #define FAT_TYPE_FAT12      1
 #define FAT_TYPE_FAT16      2
@@ -13,10 +16,18 @@
 #define FAT_SFN_NAME            8
 #define FAT_SFN_EXTENSION       3
 #define FAT_SFN_LENGTH          (FAT_SFN_NAME + FAT_SFN_EXTENSION)
-#define FAT_LFN_LENGTH          255
 #define FAT_SFN_BUFLEN          FAT_SFN_LENGTH + 2  // "filename" + '.' + "ext" + '\0'
+
+#ifdef BUILD_FILESYSTEM_FAT_LFN
+#define FAT_LFN_LENGTH          255
 #define FAT_LFN_BUFLEN          FAT_LFN_LENGTH + 1  // "longfilename" + '\0'
 #define FAT_LFN_U8_BUFLEN       384
+#define FAT_FILENAME_BUF_LEN    FAT_LFN_U8_BUFLEN
+
+#else
+#define FAT_FILENAME_BUF_LEN    FAT_SFN_BUFLEN
+
+#endif
 
 #define FAT_SECTOR_SIZE         512
 
@@ -56,7 +67,7 @@ union fat_time {
         uint16_t minute : 6;
         uint16_t hour : 5;
     };
-} __attribute__((packed));
+} OFSL_PACKED;
 
 union fat_date {
     uint16_t raw;
@@ -65,7 +76,7 @@ union fat_date {
         uint16_t month : 4;
         uint16_t year : 7;
     };
-} __attribute__((packed));
+} OFSL_PACKED;
 
 struct fat_bpb_sector {
     uint8_t         x86_jump_code[3];
@@ -93,7 +104,7 @@ struct fat_bpb_sector {
             char            fs_type[8];
 
             uint8_t         boot_code[448];
-        } __attribute__((packed)) fat;
+        } OFSL_PACKED fat;
 
         struct {
             uint32_t        fat_size32;
@@ -111,11 +122,11 @@ struct fat_bpb_sector {
             char            fs_type[8];
 
             uint8_t         boot_code[420];
-        } __attribute__((packed)) fat32;
+        } OFSL_PACKED fat32;
     };
 
     uint16_t        signature;
-} __attribute__((packed));
+} OFSL_PACKED;
 
 struct fat_fsinfo {
     uint32_t        signature1;
@@ -125,7 +136,7 @@ struct fat_fsinfo {
     uint32_t        next_free_cluster;
     uint8_t         __reserved2[14];
     uint16_t        signature3;
-} __attribute__((packed));
+} OFSL_PACKED;
 
 union fat_dir_entry {
     struct fat_direntry_file {
@@ -142,7 +153,7 @@ union fat_dir_entry {
         union fat_date  modified_date;
         uint16_t        cluster_location;
         uint32_t        size;
-    } __attribute__((packed)) file;
+    } OFSL_PACKED file;
 
     struct fat_direntry_lfn {
         uint8_t         sequence_index;
@@ -153,8 +164,8 @@ union fat_dir_entry {
         uint16_t        name_fragment2[6];
         uint16_t        cluster_location;
         uint16_t        name_fragment3[2];
-    } __attribute__((packed)) lfn;
-} __attribute__((packed));
+    } OFSL_PACKED lfn;
+} OFSL_PACKED;
 
 typedef uint32_t fatcluster_t;
 

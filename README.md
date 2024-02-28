@@ -30,37 +30,38 @@ ctest --test-dir build/tests --output-on-failure
 
 ## Configure Options
 
-Option Name                      | Type    | Description
----------------------------------|---------|-------------
-`LIBRARY_TYPE`                   | String  | Specify the library binary type.<br/>Possible values: `SHARED` or `STATIC`
-`FORCE_STD_C99`                  | Bool    | Force using C99 standard. Using C99 disables the usage of `struct timespec` in `time.h`, therefore the clock precision is limited to unit of a second.
-`USE_ZLIB`                       | Bool    | Use zlib if available.
-`BUILD_TESTING`                  | Bool    | Build test binaries
-`BUILD_CXX_WRAPPER`              | Bool    | Build C++ wrapper library
-`BUILD_FILESYSTEM_<filesystem>`  | Bool    | Build the given filesystem support.<br/>[Placeholder Values](#supporting-filesystems)
-`BUILD_PTABLE_<partition table>` | Bool    | Build the given partition table support.<br/>[Placeholder Values](#supporting-partition-tables)
-`BUILD_FSAL`                     | Bool    | Build the Filesystem Abstraction Layer
-`CMAKE_BUILD_TYPE`               | String  | Specify the build type.<br/>Possible values: `Debug` or `Release`
-`CMAKE_INSTALL_PREFIX`           | Path    | Specify the path where the library to install.
-`GENERATE_COVERAGE`              | Bool    | Add flags to the compiler to make the library to generate coverage database for test coverage analyzation.
+Option Name                       | Type    | Description
+----------------------------------|---------|-------------
+`LIBRARY_TYPE`                    | String  | Specify the library binary type.<br/>Possible values: `SHARED` or `STATIC`
+`FORCE_STD_C99`                   | Bool    | Force using C99 standard. Using C99 disables the usage of `struct timespec` in `time.h`, therefore the clock precision is limited to unit of a second.
+`USE_ZLIB`                        | Bool    | Use zlib if available.
+`BUILD_TESTING`                   | Bool    | Build test binaries
+`BUILD_CXX_WRAPPER`               | Bool    | Build C++ wrapper library
+`BUILD_FILESYSTEM_<fs>`           | Bool    | Build the given filesystem support.<br/>[Placeholder Values](#supporting-filesystems)
+`BUILD_FILESYSTEM_<fs>_EXTENSION` | List    | Build the specified extensions support of the filesystem.<br/>Extension names may vary for each filesystem.
+`BUILD_PTABLE_<partition table>`  | Bool    | Build the given partition table support.<br/>[Placeholder Values](#supporting-partition-tables)
+`BUILD_FSAL`                      | Bool    | Build the Filesystem Abstraction Layer
+`CMAKE_BUILD_TYPE`                | String  | Specify the build type.<br/>Possible values: `Debug` or `Release`
+`CMAKE_INSTALL_PREFIX`            | Path    | Specify the path where the library to install.
+`GENERATE_COVERAGE`               | Bool    | Add flags to the compiler to make the library to generate coverage database for test coverage analyzation.
 
-## Supporting Filesystems
+## Supporting Filesystems & Extensions
 
-Filesystem  | Identifier | Constraints
-------------|------------|------------------------------
-FAT12/16/32 | `FAT`      | Read only, In development
-ISO9660     | `ISO9660`  | Not working, In development
-ext2/3/4    | `EXT`      | Pending
-exFAT       | `EXFAT`    | Pending
-NTFS        | `NTFS`     | Pending
-minix       | `MINIXFS`  | Pending
-UDF         | `UDF`      | Pending
+Filesystem  | Identifier | Constraints             | Extensions
+------------|------------|-------------------------|-------------------
+FAT12/16/32 | `FAT`      | Read only, Experimental | `LFN`
+ISO9660     | `ISO9660`  | Read only, Experimental | `JOILET` `ROCKRIDGE`
+ext2/3/4    | `EXT`      | Pending                 |
+exFAT       | `EXFAT`    | Pending                 |
+NTFS        | `NTFS`     | Pending                 |
+minix       | `MINIXFS`  | Pending                 |
+UDF         | `UDF`      | Pending                 |
 
 ## Supporting Partition Tables
 
 Partition Table | Constraints
 ----------------|-----------------------------
-GPT             | Read only, In development
+GPT             | Read only, Experimental
 MBR             | Pending
 
 ## The Filesystem Abstration Layer (FSAL)

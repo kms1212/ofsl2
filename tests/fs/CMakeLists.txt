@@ -15,9 +15,6 @@ add_custom_command(
         "${CMAKE_SOURCE_DIR}/tests/data/fat/fat12.img"
         "${CMAKE_SOURCE_DIR}/tests/data/fat/fat16.img"
         "${CMAKE_SOURCE_DIR}/tests/data/fat/fat32.img"
-        "${CMAKE_SOURCE_DIR}/tests/data/fat/file.bin"
-        "${CMAKE_SOURCE_DIR}/tests/data/fat/longfilename.bin"
-        "${CMAKE_SOURCE_DIR}/tests/data/fat/유니코드.bin"
     COMMAND "${CMAKE_SOURCE_DIR}/tests/data/fat/make_data"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/tests/data/fat")
 add_custom_target(test_fat_data DEPENDS 
@@ -29,26 +26,17 @@ add_custom_target(test_fat_data DEPENDS
     "${CMAKE_SOURCE_DIR}/tests/data/fat/fat32-tree.txt"
     "${CMAKE_SOURCE_DIR}/tests/data/fat/fat12.img"
     "${CMAKE_SOURCE_DIR}/tests/data/fat/fat16.img"
-    "${CMAKE_SOURCE_DIR}/tests/data/fat/fat32.img"
-    "${CMAKE_SOURCE_DIR}/tests/data/fat/file.bin"
-    "${CMAKE_SOURCE_DIR}/tests/data/fat/longfilename.bin"
-    "${CMAKE_SOURCE_DIR}/tests/data/fat/유니코드.bin")
+    "${CMAKE_SOURCE_DIR}/tests/data/fat/fat32.img")
 
 add_custom_command(
     OUTPUT
         "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image-tree.txt"
         "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image.iso"
-        "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image_files/file.bin"
-        "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image_files/longfilename.bin"
-        "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image_files/유니코드.bin"
     COMMAND "${CMAKE_SOURCE_DIR}/tests/data/iso9660/make_data"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/tests/data/iso9660")
 add_custom_target(test_iso9660_data DEPENDS 
     "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image-tree.txt"
-    "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image.iso"
-    "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image_files/file.bin"
-    "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image_files/longfilename.bin"
-    "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image_files/유니코드.bin")
+    "${CMAKE_SOURCE_DIR}/tests/data/iso9660/image.iso")
 
 
 add_test_target(test_fat test_fat.c md5.c)

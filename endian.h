@@ -1,5 +1,5 @@
-#ifndef OFSL_ENDIAN_H__
-#define OFSL_ENDIAN_H__
+#ifndef ENDIAN_H__
+#define ENDIAN_H__
 
 #include <stdint.h>
 

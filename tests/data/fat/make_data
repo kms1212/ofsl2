@@ -24,9 +24,9 @@ dd if=/dev/zero of=fat12.img bs=1048576 count=1
 dd if=/dev/zero of=fat16.img bs=1048576 count=16
 dd if=/dev/zero of=fat32.img bs=1048576 count=64
 
-mformat -i fat12.img
-mformat -i fat16.img
-mformat -F -i fat32.img
+mformat -i fat12.img -v "FAT Filesystem Test"
+mformat -i fat16.img -v "FAT Filesystem Test"
+mformat -F -i fat32.img -v "FAT Filesystem Test"
 
 mcopy -i fat12.img -p -m -- file.bin ::
 mcopy -i fat12.img -p -m -- longfilename.bin ::

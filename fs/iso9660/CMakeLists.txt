@@ -19,3 +19,17 @@ set(CMAKE_REQUIRED_INCLUDES "")
 set(CMAKE_EXTRA_INCLUDE_FILES "")
 
 target_sources(openfsl2 PRIVATE iso9660.c)
+
+# extensions
+set(KNOWN_FILESYSTEM_ISO9660_EXTENSIONS JOILET;ROCKRIDGE)
+set(BUILD_FILESYSTEM_ISO9660_EXTENSIONS JOILET;ROCKRIDGE CACHE STRING "ISO9660 Extensions to Build")
+
+foreach(extension IN LISTS BUILD_FILESYSTEM_ISO9660_EXTENSIONS)
+    if (${extension} IN_LIST KNOWN_FILESYSTEM_ISO9660_EXTENSIONS)
+        set(BUILD_FILESYSTEM_ISO9660_${extension} 1)
+    else()
+        message(FATAL_ERROR "Invalid extension name for ISO9660")
+    endif()
+endforeach()
+
+configure_file("config.h.in" "config.h")

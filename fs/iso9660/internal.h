@@ -5,6 +5,9 @@
 
 #include <ofsl/fs/iso9660.h>
 
+#include "config.h"
+#include "fs/iso9660/config.h"
+
 #define ISO9660_SIGNATURE "CD001"
 
 #define VDTYPE_BOOTRECORD   0
@@ -13,27 +16,42 @@
 #define VDTYPE_VOLPARTDESC  3
 #define VDTYPE_VDSETTERM    255
 
+#if defined(BUILD_FILESYSTEM_ISO9660_ROCKRIDGE) || defined(BUILD_FILESYSTEM_ISO9660_JOILET)
+#define ISO9660_MAX_PATH    255
+#else
+#define ISO9660_MAX_PATH    31
+#endif
+#define ISO9660_PATH_BUFSZ  (ISO9660_MAX_PATH + 1)
+
+#ifdef BYTE_ORDER_BIG_ENDIAN
+#define get_biendian_value(biend_struct) ((biend_struct)->be)
+
+#else
+#define get_biendian_value(biend_struct) ((biend_struct)->le)
+
+#endif
+
 struct biendian_pair_uint16 {
-    uint16_t be;
     uint16_t le;
-} __attribute__((packed));
+    uint16_t be;
+} OFSL_PACKED;
 
 struct biendian_pair_int16 {
-    int16_t be;
     int16_t le;
-} __attribute__((packed));
+    int16_t be;
+} OFSL_PACKED;
 
 struct biendian_pair_uint32 {
-    uint32_t be;
     uint32_t le;
-} __attribute__((packed));
+    uint32_t be;
+} OFSL_PACKED;
 
 struct biendian_pair_int32 {
-    int32_t be;
     int32_t le;
-} __attribute__((packed));
+    int32_t be;
+} OFSL_PACKED;
 
-struct isofs_vol_datetime {
+struct isofs_time_longfmt {
     char year[4];
     char month[2];
     char day[2];
@@ -42,9 +60,9 @@ struct isofs_vol_datetime {
     char second[2];
     char ten_msec[2];
     uint8_t timezone;
-} __attribute__((packed));
+} OFSL_PACKED;
 
-struct isofs_entry_datetime {
+struct isofs_time_shortfmt {
     uint8_t year;
     uint8_t month;
     uint8_t day;
@@ -52,20 +70,40 @@ struct isofs_entry_datetime {
     uint8_t minute;
     uint8_t second;
     uint8_t timezone;
-} __attribute__((packed));
+} OFSL_PACKED;
 
 struct isofs_dir_entry_header {
     uint8_t entry_size;
     uint8_t attrib_record_size;
     struct biendian_pair_uint32 lba_data_location;
-    struct biendian_pair_uint32 lba_data_size;
-    struct isofs_entry_datetime created_time;
-    uint8_t flags;
+    struct biendian_pair_uint32 data_size;
+    struct isofs_time_shortfmt created_time;
+    uint8_t hidden : 1;
+    uint8_t directory : 1;
+    uint8_t associated : 1;
+    uint8_t has_format_info : 1;
+    uint8_t has_perm_info : 1;
+    uint8_t : 2;
+    uint8_t continued : 1;
     uint8_t interleave_file_unit_size;
     uint8_t interleave_gap_size;
     struct biendian_pair_uint16 vol_seq_num;
     uint8_t filename_len;
-} __attribute__((packed));
+} OFSL_PACKED;
+
+struct isofs_dir_entry_extension_header {
+    uint8_t identifier[2];
+    uint8_t entry_len;
+    uint8_t entry_ver;
+} OFSL_PACKED;
+
+struct isofs_pathtbl_entry_header {
+    uint8_t entry_len;
+    uint8_t entry_len_extended;
+    uint32_t lba_data;
+    uint16_t parent_dir_idx;
+    char name[];
+} OFSL_PACKED;
 
 struct isofs_vol_desc {
     uint8_t type;
@@ -78,7 +116,7 @@ struct isofs_vol_desc {
             char boot_iden[32];
 
             uint8_t sys_data[1977];
-        } __attribute__((packed)) boot_record;
+        } OFSL_PACKED boot_record;
 
         struct {
             uint8_t __reserved1;
@@ -90,11 +128,11 @@ struct isofs_vol_desc {
             struct biendian_pair_uint16 vol_set_size;
             struct biendian_pair_uint16 vol_seq_num;
             struct biendian_pair_uint16 sector_size;
-            struct biendian_pair_uint32 path_table_size;
-            uint32_t lba_le_path_table_typel;
-            uint32_t lba_le_path_table_typel_optional;
-            uint32_t lba_be_path_table_typel;
-            uint32_t lba_be_path_table_typel_optional;
+            struct biendian_pair_uint32 pathtbl_size;
+            uint32_t lba_le_pathtbl;
+            uint32_t lba_le_pathtbl_optional;
+            uint32_t lba_be_pathtbl;
+            uint32_t lba_be_pathtbl_optional;
             struct isofs_dir_entry_header rootdir_entry_header;
             uint8_t rootdir_entry_name;
             char vol_set_iden[128];
@@ -104,17 +142,72 @@ struct isofs_vol_desc {
             char copyright_file_name[37];
             char abstract_file_name[37];
             char bibliographic_file_name[37];
-            struct isofs_vol_datetime time_created;
-            struct isofs_vol_datetime time_modified;
-            struct isofs_vol_datetime time_expired_after;
-            struct isofs_vol_datetime time_effective_after;
+            struct isofs_time_longfmt time_created;
+            struct isofs_time_longfmt time_modified;
+            struct isofs_time_longfmt time_expired_after;
+            struct isofs_time_longfmt time_effective_after;
             uint8_t descriptor_version;
 
             uint8_t __reserved4;
             uint8_t sys_data[512];
             uint8_t __reserved5[653];
-        } __attribute__((packed)) primary_vol_desc;
-    } __attribute__((packed));
-} __attribute__((packed));
+        } OFSL_PACKED primary_vol_desc;
+    } OFSL_PACKED;
+} OFSL_PACKED;
+
+#ifdef BUILD_FILESYSTEM_ISO9660_ROCKRIDGE
+enum posix_file_perm {
+    PFP_EXEC = 1,
+    PFP_WRITE = 2,
+    PFP_READ = 4,
+};
+
+enum posix_file_type {
+    PFT_FIFO = 1,
+    PFT_CDEV = 2,
+    PFT_DIR = 4,
+    PFT_BDEV = 6,
+    PFT_REG = 8,
+    PFT_LNK = 10,
+    PFT_SOCK = 12,
+};
+
+struct rrip_px_entry {
+    struct isofs_dir_entry_extension_header header;
+    struct biendian_pair_uint16 file_mode;
+    struct biendian_pair_uint32 file_link;
+    struct biendian_pair_uint32 uid;
+    struct biendian_pair_uint32 gid;
+    struct biendian_pair_uint32 file_serial;
+} OFSL_PACKED;
+
+struct rrip_nm_entry {
+    struct isofs_dir_entry_extension_header header;
+    uint8_t continue_name : 1;
+    uint8_t current_directory : 1;
+    uint8_t parent_directory : 1;
+    uint8_t : 5;
+    char filename[];
+} OFSL_PACKED;
+
+struct rrip_tf_entry {
+    struct isofs_dir_entry_extension_header header;
+    union {
+        uint8_t flags_raw;
+
+        struct {
+            uint8_t creation_time : 1;
+            uint8_t modification_time : 1;
+            uint8_t access_time : 1;
+            uint8_t attr_modification_time : 1;
+            uint8_t backup_time : 1;
+            uint8_t expiration_time : 1;
+            uint8_t effective_time : 1;
+            uint8_t long_format : 1;
+        };
+    };
+} OFSL_PACKED;
+
+#endif
 
 #endif

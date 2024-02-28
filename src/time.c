@@ -2,6 +2,8 @@
 
 #include <time.h>
 
+#include "config.h"
+
 extern long timezone;
 
 static int verify_timespec(const struct timespec* ts)
@@ -9,6 +11,7 @@ static int verify_timespec(const struct timespec* ts)
     return !ts || ts->tv_sec < 0 || ts->tv_nsec < 0 || ts->tv_nsec > 999999999;
 }
 
+OFSL_EXPORT
 int ofsl_time_getlocal(OFSL_Time* fstm)
 {
 #if __STDC_VERSION__ < 201112L
@@ -36,6 +39,7 @@ int ofsl_time_getlocal(OFSL_Time* fstm)
     return 0;
 }
 
+OFSL_EXPORT
 int ofsl_time_getutc(OFSL_Time* fstm)
 {
 #if __STDC_VERSION__ < 201112L
@@ -63,6 +67,7 @@ int ofsl_time_getutc(OFSL_Time* fstm)
     return 0;
 }
 
+OFSL_EXPORT
 void ofsl_time_calcdiff(OFSL_Time* fstm, const OFSL_TimeDelta* tdelta)
 {
     fstm->second += tdelta->dsecond;
@@ -76,17 +81,20 @@ void ofsl_time_calcdiff(OFSL_Time* fstm, const OFSL_TimeDelta* tdelta)
     fstm->nsec += tdelta->dnsec;
 }
 
+OFSL_EXPORT
 void ofsl_time_getdiff(OFSL_TimeDelta* tdelta, const OFSL_Time* ref, const OFSL_Time* tm)
 {
     tdelta->dsecond = tm->second - ref->second;
     tdelta->dnsec = tm->nsec - ref->nsec;
 }
 
+OFSL_EXPORT
 int ofsl_time_getstdctm(struct tm* tm, const OFSL_Time* fstm)
 {
     return !gmtime_r(&fstm->second, tm);
 }
 
+OFSL_EXPORT
 void ofsl_time_fromstdctm(OFSL_Time* fstm, struct tm* tm)
 {
     fstm->second = timegm(tm);
