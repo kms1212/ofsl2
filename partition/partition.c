@@ -14,9 +14,9 @@ const char* ofsl_ptbl_get_error_string(OFSL_PartitionTable* pt)
 {
     if (pt->error >= 0) {
         if (pt->error > OFSL_PTE_MAX) {
-            return error_str_list[pt->error];
-        } else {
             return NULL;
+        } else {
+            return error_str_list[pt->error];
         }
     } else {
         return pt->ops->get_error_string(pt);
