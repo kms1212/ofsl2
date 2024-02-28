@@ -2,23 +2,20 @@
 
 # this tool requires GNU Mtools, GNU coreutils, dd, and cat.
 
-if [ ! -f file.bin ]; then
-    dd if=/dev/urandom of=file.bin bs=1024 count=1
-fi
-FILE_BIN_MD5=$(md5sum file.bin | cut -d' ' -f1)
-touch -d 2024-02-2019:18:00 file.bin
+generate_file() {
+    local filename="$1"
+    local filesize="$2"
 
-if [ ! -f longfilename.bin ]; then
-    dd if=/dev/urandom of=longfilename.bin bs=1024 count=1
-fi
-LONGFILENAME_BIN_MD5=$(md5sum longfilename.bin | cut -d' ' -f1)
-touch -d 2024-02-2019:18:00 longfilename.bin
+    if [ ! -f "$filename" ]; then
+        dd if=/dev/urandom of="$filename" bs="$filesize" count=1
+    fi
+    
+    echo "$filesize $(stat -f '%Sc' -t '%Y-%m-%d %H:%M') $(md5sum "$filename" | cut -d' ' -f1)"
+}
 
-if [ ! -f 유니코드.bin ]; then
-    dd if=/dev/urandom of=유니코드.bin bs=1024 count=1
-fi
-UTEST1_BIN_MD5=$(md5sum 유니코드.bin | cut -d' ' -f1)
-touch -d 2024-02-2019:18:00 유니코드.bin
+FILE_BIN_INFO="$(generate_file file.bin 1024)"
+LONGFILENAME_BIN_INFO="$(generate_file longfilename.bin 1024)"
+UTEST1_BIN_INFO="$(generate_file 유니코드.bin 1024)"
 
 dd if=/dev/zero of=fat12.img bs=1048576 count=1
 dd if=/dev/zero of=fat16.img bs=1048576 count=16
@@ -40,21 +37,21 @@ cat > fat12-tree.txt <<EOF
 # directory tree of fat12.img
 # file_name file_size date_created time_created md5_checksum
 
-FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
-유니코드.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+FILE.BIN $FILE_BIN_INFO
+longfilename.bin $LONGFILENAME_BIN_INFO
+유니코드.bin $UTEST1_BIN_INFO
 directory1 dir
 directory2 dir
 
 $ directory1
 . dir
 .. dir
-FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
+FILE.BIN $FILE_BIN_INFO
 
 $ directory2
 . dir
 .. dir
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+longfilename.bin $LONGFILENAME_BIN_INFO
 EOF
 cat > fat12cl-tree.txt <<EOF
 # directory tree of fat12.img
@@ -63,21 +60,21 @@ cat > fat12cl-tree.txt <<EOF
 # unicode_enabled = 0
 # file_name file_size date_created time_created md5_checksum
 
-file.bin 1024 2024-02-20 19:18 $FILE_BIN_MD5
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
-????.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+file.bin $FILE_BIN_INFO
+longfilename.bin $LONGFILENAME_BIN_INFO
+????.bin $UTEST1_BIN_INFO
 directory1 dir
 directory2 dir
 
 $ directory1
 . dir
 .. dir
-file.bin 1024 2024-02-20 19:18 $FILE_BIN_MD5
+file.bin $FILE_BIN_INFO
 
 $ directory2
 . dir
 .. dir
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+longfilename.bin $LONGFILENAME_BIN_INFO
 EOF
 cat > fat12clu-tree.txt <<EOF
 # directory tree of fat12.img
@@ -85,21 +82,21 @@ cat > fat12clu-tree.txt <<EOF
 # sfn_lowercase = 1
 # file_name file_size date_created time_created md5_checksum
 
-file.bin 1024 2024-02-20 19:18 $FILE_BIN_MD5
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
-유니코드.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+file.bin $FILE_BIN_INFO
+longfilename.bin $LONGFILENAME_BIN_INFO
+유니코드.bin $UTEST1_BIN_INFO
 directory1 dir
 directory2 dir
 
 $ directory1
 . dir
 .. dir
-file.bin 1024 2024-02-20 19:18 $FILE_BIN_MD5
+file.bin $FILE_BIN_INFO
 
 $ directory2
 . dir
 .. dir
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+longfilename.bin $LONGFILENAME_BIN_INFO
 EOF
 cat > fat12csl-tree.txt <<EOF
 # directory tree of fat12.img
@@ -108,21 +105,21 @@ cat > fat12csl-tree.txt <<EOF
 # sfn_lowercase = 1
 # file_name file_size date_created time_created md5_checksum
 
-file.bin 1024 2024-02-20 19:18 $FILE_BIN_MD5
-longfi~1.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
-~1.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+file.bin $FILE_BIN_INFO
+longfi~1.bin $LONGFILENAME_BIN_INFO
+~1.bin $UTEST1_BIN_INFO
 direct~1 dir
 direct~2 dir
 
 $ direct~1
 . dir
 .. dir
-file.bin 1024 2024-02-20 19:18 $FILE_BIN_MD5
+file.bin $FILE_BIN_INFO
 
 $ direct~2
 . dir
 .. dir
-longfi~1.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+longfi~1.bin $LONGFILENAME_BIN_INFO
 EOF
 
 mcopy -i fat16.img -p -m -- file.bin ::
@@ -137,21 +134,21 @@ cat > fat16-tree.txt <<EOF
 # directory tree of fat16.img
 # file_name file_size date_created time_created md5_checksum
 
-FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
-유니코드.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+FILE.BIN $FILE_BIN_INFO
+longfilename.bin $LONGFILENAME_BIN_INFO
+유니코드.bin $UTEST1_BIN_INFO
 directory1 dir
 directory2 dir
 
 $ directory1
 . dir
 .. dir
-FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
+FILE.BIN $FILE_BIN_INFO
 
 $ directory2
 . dir
 .. dir
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+longfilename.bin $LONGFILENAME_BIN_INFO
 EOF
 
 mcopy -i fat32.img -p -m -- file.bin ::
@@ -166,19 +163,19 @@ cat > fat32-tree.txt <<EOF
 # directory tree of fat32.img
 # file_name file_size date_created time_created md5_checksum
 
-FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
-유니코드.bin 1024 2024-02-20 19:18 $UTEST1_BIN_MD5
+FILE.BIN $FILE_BIN_INFO
+longfilename.bin $LONGFILENAME_BIN_INFO
+유니코드.bin $UTEST1_BIN_INFO
 directory1 dir
 directory2 dir
 
 $ directory1
 . dir
 .. dir
-FILE.BIN 1024 2024-02-20 19:18 $FILE_BIN_MD5
+FILE.BIN $FILE_BIN_INFO
 
 $ directory2
 . dir
 .. dir
-longfilename.bin 1024 2024-02-20 19:18 $LONGFILENAME_BIN_MD5
+longfilename.bin $LONGFILENAME_BIN_INFO
 EOF
