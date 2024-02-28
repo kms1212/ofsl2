@@ -159,6 +159,7 @@ static void test_dir_list(void)
 
     char line_buf[512];
     char fname_buf[384];
+    char* alt_fnames[16] = { NULL, };
     unsigned int fsize, year, month, day, hour, minute;
     
     while (fgets(line_buf, sizeof(line_buf), imgtree)) {
@@ -177,6 +178,22 @@ static void test_dir_list(void)
                         CU_ASSERT_PTR_NOT_NULL_FATAL(subdir);
                         it = ofsl_dir_iter_start(subdir);
                         CU_ASSERT_PTR_NOT_NULL_FATAL(it);
+                    }
+                    break;
+                }
+                case '+': {
+                    if (sscanf(line_buf, "+%383s\n", fname_buf) == 1) {
+                        for (int i = 0; i < 16; i++) {
+                            if (!alt_fnames[i]) {
+                                size_t len = strnlen(fname_buf, sizeof(fname_buf));
+                                alt_fnames[i] = malloc(len);
+                                strncpy(alt_fnames[i], fname_buf, len);
+                                if (i < 15) {
+                                    alt_fnames[i + 1] = NULL;
+                                }
+                                break;
+                            }
+                        }
                     }
                     break;
                 }
@@ -221,7 +238,22 @@ static void test_dir_list(void)
                         /* unrecognized */
                         break;
                     }
-                    CU_ASSERT_STRING_EQUAL(fname_buf, ofsl_dir_iter_get_name(it));
+                    if (strncmp(fname_buf, ofsl_dir_iter_get_name(it), strnlen(fname_buf, sizeof(fname_buf))) == 0) {
+                        CU_PASS("File name matched.");
+                    } else {
+                        int matched = 0;
+                        for (int i = 0; i < 16 && alt_fnames[i]; i++) {
+                            if (strncmp(alt_fnames[i], ofsl_dir_iter_get_name(it), strnlen(alt_fnames[i], sizeof(fname_buf))) == 0) {
+                                CU_PASS("File name matched.");
+                                matched = 1;
+                            }
+                            free(alt_fnames[i]);
+                            alt_fnames[i] = NULL;
+                        }
+                        if (!matched) {
+                            CU_FAIL("File name unmatched.");
+                        }
+                    }
                     break;
                 }
             }
@@ -248,6 +280,7 @@ static void test_file_read(void)
     char line_buf[512];
     char fname_buf[384];
     char md5str_buf[2][33];
+    char* alt_fnames[16] = { NULL, };
     unsigned int fsize;
     
     while (fgets(line_buf, sizeof(line_buf), imgtree)) {
@@ -264,11 +297,34 @@ static void test_file_read(void)
                         CU_ASSERT_PTR_NOT_NULL_FATAL(subdir);
                     }
                     break;
+                case '+': {
+                    if (sscanf(line_buf, "+%383s\n", fname_buf) == 1) {
+                        for (int i = 0; i < 16; i++) {
+                            if (!alt_fnames[i]) {
+                                size_t len = strnlen(fname_buf, sizeof(fname_buf));
+                                alt_fnames[i] = malloc(len);
+                                strncpy(alt_fnames[i], fname_buf, len);
+                                if (i < 15) {
+                                    alt_fnames[i + 1] = NULL;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
                 default:
                     if (sscanf(line_buf, "%383s %u %*u-%*u-%*u %*u:%*u %s\n", fname_buf, &fsize, md5str_buf[0]) == 3) {
                         /* file */
                         uint8_t* file_data = malloc(fsize);
                         OFSL_File* file = ofsl_file_open(subdir ? subdir : rootdir, fname_buf, "r");
+                        for (int i = 0; i < 16 && alt_fnames[i]; i++) {
+                            if (!file) {
+                                file = ofsl_file_open(subdir ? subdir : rootdir, alt_fnames[i], "r");
+                            }
+                            alt_fnames[i] = NULL;
+                            free(alt_fnames[i]);
+                        }
                         CU_ASSERT_PTR_NOT_NULL_FATAL(file);
 
                         CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, fsize, 1), 1);

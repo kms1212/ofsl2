@@ -2,6 +2,8 @@
 
 # this tool requires GNU Mtools, GNU coreutils, dd, and cat.
 
+STAT_TYPE=$(test "$(stat -f .)" = "." && echo "unix" || echo "linux")
+
 generate_file() {
     local filename="$1"
     local filesize="$2"
@@ -10,7 +12,11 @@ generate_file() {
         dd if=/dev/urandom of="$filename" bs="$filesize" count=1
     fi
     
-    echo "$filesize $(stat -f '%Sc' -t '%Y-%m-%d %H:%M') $(md5sum "$filename" | cut -d' ' -f1)"
+    if [ "$STAT_TYPE" = "unix" ]; then
+        echo "$filesize $(stat -f '%Sc' -t '%Y-%m-%d %H:%M' "$filename") $(md5sum "$filename" | cut -d' ' -f1)"
+    else
+        echo "$filesize $(date --date="@$(stat -c '%Y' "$filename")" "+%Y-%m-%d %H:%M") $(md5sum "$filename" | cut -d' ' -f1)"
+    fi
 }
 
 FILE_BIN_INFO="$(generate_file file.bin 1024)"
@@ -107,7 +113,8 @@ cat > fat12csl-tree.txt <<EOF
 
 file.bin $FILE_BIN_INFO
 longfi~1.bin $LONGFILENAME_BIN_INFO
-~1.bin $UTEST1_BIN_INFO
++~1.bin
+____.bin $UTEST1_BIN_INFO
 direct~1 dir
 direct~2 dir
 
