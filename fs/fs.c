@@ -20,9 +20,9 @@ const char* ofsl_fs_get_error_string(OFSL_FileSystem* fs)
 {
     if (fs->error >= 0) {
         if (fs->error > OFSL_FSE_MAX) {
-            return error_str_list[fs->error];
-        } else {
             return NULL;
+        } else {
+            return error_str_list[fs->error];
         }
     } else {
         return fs->ops->get_error_string(fs);
