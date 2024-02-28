@@ -239,7 +239,7 @@ static int flush_diskbuf_entry(struct fs_fat* fs, unsigned int entry) {
     if (fs->diskbuf[entry]->dirty) {
         switch (fs->diskbuf[entry]->type) {
             case DISKBUF_TYPE_CLUSTER: {
-                lba_t clus_head_lba;
+                lba_t clus_head_lba = 0;
                 cluster_to_sector(fs, &clus_head_lba, fs->diskbuf[entry]->cluster);
                 ofsl_drive_write_sector(
                     fs->part.drv,
@@ -484,7 +484,7 @@ static int read_cluster(struct fs_fat* fs, unsigned int* entry_idx, fatcluster_t
     unsigned int target_entry_idx;
     allocate_diskbuf_cluster_entry(fs, &target_entry_idx, cluster);
 
-    lba_t lba;
+    lba_t lba = 0;
     cluster_to_sector(fs, &lba, cluster);
 
     if (!fs->diskbuf[target_entry_idx]->data_valid) {
