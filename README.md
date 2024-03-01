@@ -1,4 +1,6 @@
 # OpenFSL 2
+![BSD 3-Clause License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
+[![build](https://github.com/kms1212/ofsl2/actions/workflows/build.yml/badge.svg)](https://github.com/kms1212/ofsl2/actions/workflows/build.yml)
 
 This is a library for manipulating file system structures inside the physical drive or disk image implemented on C99 and C11 partially.
 There is an C++ wrapper supports C++11 or higher and it can be used with the C header.
@@ -124,15 +126,15 @@ int main(int argc, char** argv)
 
     fsal_gmkdir("directory");
     fsal_gchdir("directory");
-    fsal_gpwd();  // "hd0p0:/directory"
+    fsal_gpwd();  /* "hd0p0:/directory" */
 
     fsal_gchdir("/");
-    fsal_gpwd();  // "hd0p0:/"
+    fsal_gpwd();  /* "hd0p0:/" */
 
     FSAL_State local_state;
     fsal_init_state(&local_state);
     fsal_chdir("hd0p1:/directory");
-    fsal_pwd(&local_state);  // "hd0p1:/directory"
+    fsal_pwd(&local_state);  /* "hd0p1:/directory" */
 
     FSAL_File* file = fsal_gfopen("file.txt", "r");
     char line_buf[128];
@@ -163,14 +165,14 @@ int main(int argc, char** argv)
 
     ofsl::fsal::mkdir("directory");
     ofsl::fsal::chdir("directory");
-    ofsl::fsal::pwd();  // "hd0p0:/directory"
+    ofsl::fsal::pwd();  /* "hd0p0:/directory" */
 
     ofsl::fsal::chdir("/");
-    ofsl::fsal::pwd();  // "hd0p0:/"
+    ofsl::fsal::pwd();  /* "hd0p0:/" */
 
     ofal::fsal::State local_state;
     local_state.chdir("hd0p1:/directory");
-    local_state.pwd(&local_state);  // "hd0p1:/directory"
+    local_state.pwd(&local_state);  /* "hd0p1:/directory" */
 
     ofsl::fsal::File* file("file.txt", "r");
     char line_buf[128];
