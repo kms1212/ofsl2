@@ -261,7 +261,7 @@ static void test_dir_list(void)
                         /* unrecognized */
                         break;
                     }
-                    const char iter_fname = ofsl_dir_iter_get_name(it);
+                    const char* iter_fname = ofsl_dir_iter_get_name(it);
                     if (strncmp(fname_buf, iter_fname, strnlen(fname_buf, sizeof(fname_buf))) == 0) {
                         CU_PASS("File name matched.");
                     } else {
