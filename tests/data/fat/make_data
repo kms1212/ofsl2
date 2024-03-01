@@ -10,9 +10,7 @@ generate_file() {
     local filename="$1"
     local filesize="$2"
 
-    if [ ! -f "$filename" ]; then
-        dd if=/dev/urandom of="$filename" bs="$filesize" count=1
-    fi
+    dd if=/dev/urandom of="$filename" bs="$filesize" count=1
     
     if [ "$STAT_TYPE" = "unix" ]; then
         echo "$filesize $(stat -f '%Sc' -t '%Y-%m-%d %H:%M' "$filename") $(md5sum "$filename" | cut -d' ' -f1)"

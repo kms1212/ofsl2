@@ -6,6 +6,7 @@
 #include <ofsl/fs/iso9660.h>
 
 #include "config.h"
+#include "export.h"
 #include "fs/iso9660/config.h"
 
 #define ISO9660_SIGNATURE "CD001"

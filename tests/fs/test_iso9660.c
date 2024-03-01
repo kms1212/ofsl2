@@ -91,7 +91,10 @@ static void test_dir_list(void)
                     }
                     break;
                 default: {
-                    if (sscanf(line_buf, "%383s %u %u-%u-%u %u:%u:%u %*s\n", fname_buf, &fsize,  &year, &month, &day, &hour, &minute, &second) == 8) {
+                    if (sscanf(
+                        line_buf,
+                        "%383s %u %u-%u-%u %u:%u:%u %*s\n",
+                        fname_buf, &fsize,  &year, &month, &day, &hour, &minute, &second) == 8) {
                         /* file */
                         CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_next(it));
 
@@ -162,7 +165,10 @@ static void test_file_read(void)
                     }
                     break;
                 default:
-                    if (sscanf(line_buf, "%383s %u %*u-%*u-%*u %*u:%*u:%*u %s\n", fname_buf, &fsize, md5str_buf[0]) == 3) {
+                    if (sscanf(
+                        line_buf,
+                        "%383s %u %*u-%*u-%*u %*u:%*u:%*u %s\n",
+                        fname_buf, &fsize, md5str_buf[0]) == 3) {
                         /* file */
                         uint8_t* file_data = malloc(fsize);
                         OFSL_File* file = ofsl_file_open(subdir ? subdir : rootdir, fname_buf, "r");
@@ -186,6 +192,7 @@ static void test_file_read(void)
                         md5str_buf[0][32] = 0;
                         md5str_buf[1][32] = 0;
                         CU_ASSERT_STRING_EQUAL(md5str_buf[0], md5str_buf[1]);
+                        printf("%s, %s\n", md5str_buf[0], md5str_buf[1]);
 
                         CU_ASSERT_FALSE(ofsl_file_seek(file, 0, SEEK_SET));
                         CU_ASSERT_EQUAL(ofsl_file_tell(file), 0);

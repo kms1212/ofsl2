@@ -3,6 +3,7 @@
 #include <zlib.h>
 
 #include "config.h"
+#include "export.h"
 
 OFSL_HIDDEN
 uint32_t _gen_crc32(uint32_t crc, const void* buf, size_t len)

@@ -4,7 +4,7 @@
 
 #include <ofsl/fs/errmsg.h>
 
-#include "config.h"
+#include "export.h"
 
 static const char* error_str_list[] = {
     "Operation successfully finished",

@@ -13,6 +13,7 @@
 #include "fs/fat/config.h"
 #include "fs/fat/internal.h"
 #include "fs/fat/defaults.h"
+#include "fs/fat/codepage.h"
 
 #define DISKBUF_TYPE_SECTOR     0
 #define DISKBUF_TYPE_CLUSTER    1
@@ -926,6 +927,8 @@ get_volume_string(
     struct fs_fat* fs = check_fs_mounted(fs_opaque);
     if (!fs) return 1;
 
+
+    /* TODO: remove this bulky thing!!! */
     const uint16_t block_size = 
         (fs->fat_type != FAT_TYPE_FAT32) && (fs->root_cluster == 0) ?
             fs->sector_size : fs->cluster_size;
@@ -949,7 +952,7 @@ get_volume_string(
         /* fetch current block (sector or cluster) */
         if (fs->fat_type != FAT_TYPE_FAT32 && fs->root_cluster == 0) {
             /* root directory */
-            if (current_block_idx >= fs->root_sector_count) return 1;
+            if (current_block_idx >= fs->root_sector_count) break;
             read_sector(
                 fs,
                 &diskbuf_entry_idx,
@@ -957,7 +960,7 @@ get_volume_string(
         } else {
             fatcluster_t current_cluster = fs->root_cluster;
             if (get_next_cluster(fs, &current_cluster, current_block_idx)) {
-                return 1;
+                break;
             }
             read_cluster(fs, &diskbuf_entry_idx, current_cluster);
         }
@@ -965,9 +968,9 @@ get_volume_string(
 
         while (current_entry_idx < entries_per_block) {
             union fat_dir_entry* current_entry = &entries[current_entry_idx];
-            if (current_entry->file.name[0] == 0) {
+            if ((uint8_t)current_entry->file.name[0] == 0) {
                 end_seek = 1;
-            } else if (current_entry->file.name[0] == 0xE5) {
+            } else if ((uint8_t)current_entry->file.name[0] == 0xE5) {
                 /* skip if file entry is deleted */
 
             } else if (test_bitfield(
@@ -987,6 +990,7 @@ get_volume_string(
                 /* root directory has volume id entry */
                 entry_found = 1;
                 end_seek = 1;
+                break;
             } else {
                 /* root directory does not have volume id entry */
                 break;
@@ -1009,6 +1013,9 @@ get_volume_string(
                 volid_buf,
                 len < sizeof(volid_buf) ? len : sizeof(volid_buf));
 #endif
+        } else {
+            const char* fn = entries[current_entry_idx].file.name;
+            remove_right_padding(buf, fn, len, 11);
         }
     }
 
@@ -1190,9 +1197,9 @@ static int dir_iter_next(OFSL_DirectoryIterator* it_opaque)
         while (it->current_entry_idx < entries_per_block) {
             union fat_dir_entry* current_entry =
                 &entries[it->current_entry_idx];
-            if (current_entry->file.name[0] == 0) {  /* End of entry list */
+            if ((uint8_t)current_entry->file.name[0] == 0) {  /* End of entry list */
                 return 1;
-            } else if (current_entry->file.name[0] == 0xE5) {
+            } else if ((uint8_t)current_entry->file.name[0] == 0xE5) {
                 /* skip if file entry is deleted */
             } else if (test_bitfield(
                 current_entry->file.attribute,
@@ -1349,26 +1356,42 @@ match_name(
 {
     if (!parent) return 0;
     struct fs_fat* fs = check_fs_mounted(parent->dir.fs);
+    int match = 0;
 
     struct dirit_fat* it =
         (struct dirit_fat*)dir_iter_start((OFSL_Directory*)parent);
     while (!dir_iter_next((OFSL_DirectoryIterator*)it)) {
         if (fs->options.case_sensitive) {
             if (strncmp(name, it->filename, sizeof(it->filename)) == 0) {
-                memcpy(direntry_buf, &it->direntry, sizeof(*direntry_buf));
-                dir_iter_end((OFSL_DirectoryIterator*)it);
-                return 1;
+                match = 1;
+                goto cmp_end;
             }
         } else {
-            if (strncasecmp(name, it->filename, sizeof(it->filename)) == 0) {
-                memcpy(direntry_buf, &it->direntry, sizeof(*direntry_buf));
-                dir_iter_end((OFSL_DirectoryIterator*)it);
-                return 1;
+            const char* uctable = get_uppercase_table(fs->options.codepage);
+            for (int i = 0; i < sizeof(it->filename); i++) {
+                char a, b;
+                a = (uint8_t)name[i] >= 0x80 ?
+                        uctable[(uint8_t)name[i] - 0x80] :
+                        toupper(name[i]);
+                b = (uint8_t)it->filename[i] >= 0x80 ?
+                        uctable[(uint8_t)it->filename[i] - 0x80] :
+                        toupper(it->filename[i]);
+                if (a != b) {
+                    break;
+                } else if (!a) {
+                    match = 1;
+                    goto cmp_end;
+                }
             }
         }
     }
+
+cmp_end:
+    if (match) {
+        memcpy(direntry_buf, &it->direntry, sizeof(*direntry_buf));
+    }
     dir_iter_end((OFSL_DirectoryIterator*)it);
-    return 0;
+    return match;
 }
 
 static OFSL_File*
@@ -1586,6 +1609,7 @@ OFSL_FileSystem* ofsl_fs_fat_create(OFSL_Partition* part)
     fs->options.use_fsinfo_nextfree = DEFAULT_USE_FSINFO_NEXTFREE;
     fs->options.case_sensitive = DEFAULT_CASE_SENSITIVE;
     fs->options.sfn_lowercase = DEFAULT_SFN_LOWERCASE;
+    fs->options.codepage = DEFAULT_CODEPAGE;
 
     fs->mounted = 0;
 

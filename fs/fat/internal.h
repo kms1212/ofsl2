@@ -6,6 +6,7 @@
 #include <ofsl/fs/fat.h>
 
 #include "config.h"
+#include "export.h"
 #include "fs/fat/config.h"
 
 #define FAT_TYPE_UNKNOWN    0
@@ -139,8 +140,8 @@ struct fat_fsinfo {
 } OFSL_PACKED;
 
 struct fat_direntry_file {
-    uint8_t         name[FAT_SFN_NAME];
-    uint8_t         extension[FAT_SFN_EXTENSION];
+    char            name[FAT_SFN_NAME];
+    char            extension[FAT_SFN_EXTENSION];
     uint8_t         attribute;
     uint8_t         __reserved;
     uint8_t         created_tenth;

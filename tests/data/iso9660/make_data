@@ -6,9 +6,7 @@ generate_file() {
     local filename="$1"
     local filesize="$2"
 
-    if [ ! -f "$filename" ]; then
-        dd if=/dev/urandom of="$filename" bs="$filesize" count=1
-    fi
+    dd if=/dev/urandom of="$filename" bs="$filesize" count=1
     
     echo "$filesize 2024-02-28 13:55:58 $(md5sum "$filename" | cut -d' ' -f1)"
 }
@@ -18,9 +16,9 @@ LONGFILENAME_BIN_INFO="$(generate_file longfilename.bin 1024)"
 UTEST1_BIN_INFO="$(generate_file 유니코드.bin 1024)"
 
 mkdir -p image_files
-cp -n file.bin image_files
-cp -n longfilename.bin image_files
-cp -n 유니코드.bin image_files
+cp -f file.bin image_files
+cp -f longfilename.bin image_files
+cp -f 유니코드.bin image_files
 mkdir -p image_files/directory1
 cp -f file.bin image_files/directory1
 

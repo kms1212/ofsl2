@@ -10,6 +10,7 @@ extern "C" {
 
 struct ofsl_fs_fat_option {
     unsigned int diskbuf_count;
+    unsigned int codepage;
     uint8_t     lfn_enabled : 1;
     uint8_t     unicode_enabled : 1;
     uint8_t     use_fsinfo_nextfree : 1;

@@ -149,10 +149,11 @@ static void test_vol_str(void)
 {
     char str_buf[129];
     ofsl_fs_get_volume_string(fat, OFSL_VSTYPE_LABEL, str_buf, sizeof(str_buf));
+    printf("%s\n", str_buf);
     if (lfn_enabled) {
         CU_ASSERT_STRING_EQUAL(str_buf, "FAT Filesystem Test");
     } else {
-        CU_ASSERT_STRING_EQUAL(str_buf, "FAT Filesys");
+        CU_ASSERT_STRING_EQUAL(str_buf, "FAT FILESYS");
     }
     ofsl_fs_get_volume_string(fat, OFSL_VSTYPE_SERIAL, str_buf, sizeof(str_buf));
     CU_ASSERT_STRING_EQUAL(str_buf, "0123-ABCD");

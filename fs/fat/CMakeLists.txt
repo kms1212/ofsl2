@@ -15,7 +15,7 @@ assert_type_size("union fat_dir_entry" UNION_FAT_DIR_ENTRY 32)
 set(CMAKE_REQUIRED_INCLUDES "")
 set(CMAKE_EXTRA_INCLUDE_FILES "")
 
-target_sources(openfsl2 PRIVATE fat.c)
+target_sources(openfsl2 PRIVATE fat.c codepage.c)
 
 # extensions
 set(KNOWN_FILESYSTEM_FAT_EXTENSIONS LFN)

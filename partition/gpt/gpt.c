@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "export.h"
 #include "partition/gpt/internal.h"
 #include "crypto/crc32.h"
 
@@ -88,8 +89,14 @@ static int list_next(OFSL_Partition* part_opaque)
     }
 
     uint8_t sector_buf[512];
-    ofsl_drive_read_sector(pt->drv, sector_buf, pt->lba_part_entry_start + (part->idx / 4), sizeof(sector_buf), 1);
-    struct gpt_part_entry* pent = &((struct gpt_part_entry*)sector_buf)[part->idx % 4];
+    ofsl_drive_read_sector(
+        pt->drv,
+        sector_buf,
+        pt->lba_part_entry_start + (part->idx / 4),
+        sizeof(sector_buf),
+        1);
+    struct gpt_part_entry* pent =
+        &((struct gpt_part_entry*)sector_buf)[part->idx % 4];
 
     uint16_t guid_sum = 0;
     for (int i = 0; i < 16; i++) {
@@ -132,13 +139,19 @@ OFSL_PartitionTable* ofsl_ptbl_gpt_create(OFSL_Drive* drv)
     uint8_t sector_buf[512];
     ofsl_drive_read_sector(drv, sector_buf, 0, sizeof(sector_buf), 1);
     struct mbr_table_sector* protmbr = (struct mbr_table_sector*)sector_buf;
-    if (protmbr->signature != 0xAA55 || protmbr->partition_entry[0].type != MBR_PTYPE_GPT) {
+    if ((protmbr->signature != 0xAA55) ||
+        (protmbr->partition_entry[0].type != MBR_PTYPE_GPT)) {
         return NULL;
     }
     lba_t lba_gpt_header = protmbr->partition_entry[0].lba_start;
 
     /* verify GPT header */
-    ofsl_drive_read_sector(drv, sector_buf, lba_gpt_header, sizeof(sector_buf), 1);
+    ofsl_drive_read_sector(
+        drv,
+        sector_buf,
+        lba_gpt_header,
+        sizeof(sector_buf),
+        1);
     struct gpt_table_header* gpthdr = (struct gpt_table_header*)sector_buf;
     if (strncmp(gpthdr->signature, "EFI PART", 8) != 0) {
         return NULL;

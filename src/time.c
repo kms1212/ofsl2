@@ -2,7 +2,7 @@
 
 #include <time.h>
 
-#include "config.h"
+#include "export.h"
 
 extern long timezone;
 
