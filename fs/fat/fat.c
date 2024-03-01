@@ -1367,7 +1367,7 @@ match_name(
                 goto cmp_end;
             }
         } else {
-            const char* uctable = get_uppercase_table(fs->options.codepage);
+            const char* uctable = (const char*)get_uppercase_table(fs->options.codepage);
             for (int i = 0; i < sizeof(it->filename); i++) {
                 char a, b;
                 a = (uint8_t)name[i] >= 0x80 ?

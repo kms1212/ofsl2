@@ -5,7 +5,7 @@
 #include "export.h"
 
 OFSL_HIDDEN
-const char* get_uppercase_table(int codepage)
+const uint8_t* get_uppercase_table(int codepage)
 {
     switch (codepage) {
         case 437:
