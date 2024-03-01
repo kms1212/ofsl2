@@ -1,6 +1,7 @@
 # OpenFSL 2
 ![BSD 3-Clause License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
 [![build](https://github.com/kms1212/ofsl2/actions/workflows/build.yml/badge.svg)](https://github.com/kms1212/ofsl2/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/kms1212/ofsl2/graph/badge.svg?token=OQQ5TAQUKP)](https://codecov.io/gh/kms1212/ofsl2)
 
 This is a library for manipulating file system structures inside the physical drive or disk image implemented on C99 and C11 partially.
 There is an C++ wrapper supports C++11 or higher and it can be used with the C header.
