@@ -1,0 +1,50 @@
+name: coverage
+
+on: [ push, pull_request ]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set reusable strings
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+    - name: Install prerequisites
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: zlib1g-dev libcunit1 libcunit1-dev mtools xorriso lcov
+        version: 1.2
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -DCMAKE_CXX_COMPILER=g++
+        -DCMAKE_C_COMPILER=gcc
+        -DCMAKE_BUILD_TYPE=Debug
+        -DBUILD_TESTING=TRUE
+        -DBUILD_CXX_WRAPPER=FALSE
+        -DGENERATE_COVERAGE=TRUE
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Debug
+
+    - name: Test
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }}/tests --output-on-failure --build-config ${{ matrix.build_type }}
+      
+    - name: Upload coverage reports to Codecov
+      shell: bash
+      run : |
+        lcov --directory "${{ github.workspace }}" --capture --output-file "${{ github.workspace }}/coverage.info"
+        lcov --list "${{ github.workspace }}/coverage.info"
+        bash <(curl -s https://codecov.io/bash) -f "${{ github.workspace }}/coverage.info"
