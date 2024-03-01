@@ -8,7 +8,7 @@ extern "C" {
 typedef enum {
     OFSL_PTE_SUCCESS    = 0,
     OFSL_PTE_NOENT      = 1,
-    OFSL_PTE_MAX        = 2,  // should be equal to last enum value
+    OFSL_PTE_MAX        = 2,  /* should be equal to last enum value */
 } OFSL_PartitionTableError;
 
 #ifdef __cplusplus

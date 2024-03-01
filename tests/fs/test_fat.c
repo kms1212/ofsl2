@@ -17,6 +17,7 @@ OFSL_Drive* drive;
 OFSL_FileSystem* fat;
 const char* fsname_expected;
 const char* imgtree_path;
+int lfn_enabled = 1;
 
 static int init_fat12_suite(void)
 {
@@ -31,6 +32,7 @@ static int init_fat12_suite(void)
 
     fsname_expected = "FAT12";
     imgtree_path = "tests/data/fat/fat12-tree.txt";
+    lfn_enabled = 1;
     return 0;
 }
 
@@ -52,6 +54,7 @@ static int init_fat12_cl_suite(void)
 
     fsname_expected = "FAT12";
     imgtree_path = "tests/data/fat/fat12cl-tree.txt";
+    lfn_enabled = 1;
     return 0;
 }
 
@@ -72,6 +75,7 @@ static int init_fat12_clu_suite(void)
 
     fsname_expected = "FAT12";
     imgtree_path = "tests/data/fat/fat12clu-tree.txt";
+    lfn_enabled = 1;
     return 0;
 }
 
@@ -93,6 +97,7 @@ static int init_fat12_csl_suite(void)
 
     fsname_expected = "FAT12";
     imgtree_path = "tests/data/fat/fat12csl-tree.txt";
+    lfn_enabled = 0;
     return 0;
 }
 
@@ -109,6 +114,7 @@ static int init_fat16_suite(void)
 
     fsname_expected = "FAT16";
     imgtree_path = "tests/data/fat/fat16-tree.txt";
+    lfn_enabled = 1;
     return 0;
 }
 
@@ -125,6 +131,7 @@ static int init_fat32_suite(void)
 
     fsname_expected = "FAT32";
     imgtree_path = "tests/data/fat/fat32-tree.txt";
+    lfn_enabled = 1;
     return 0;
 }
 
@@ -136,6 +143,19 @@ static void test_mount(void)
 static void test_unmount(void)
 {
     CU_ASSERT_FALSE(ofsl_fs_unmount(fat));
+}
+
+static void test_vol_str(void)
+{
+    char str_buf[129];
+    ofsl_fs_get_volume_string(fat, OFSL_VSTYPE_LABEL, str_buf, sizeof(str_buf));
+    if (lfn_enabled) {
+        CU_ASSERT_STRING_EQUAL(str_buf, "FAT Filesystem Test");
+    } else {
+        CU_ASSERT_STRING_EQUAL(str_buf, "FAT Filesys");
+    }
+    ofsl_fs_get_volume_string(fat, OFSL_VSTYPE_SERIAL, str_buf, sizeof(str_buf));
+    CU_ASSERT_STRING_EQUAL(str_buf, "0123-ABCD");
 }
 
 static void test_no_such_entry(void)
@@ -161,7 +181,7 @@ static void test_dir_list(void)
     char fname_buf[384];
     char* alt_fnames[16] = { NULL, };
     unsigned int fsize, year, month, day, hour, minute;
-    
+
     while (fgets(line_buf, sizeof(line_buf), imgtree)) {
         if (strnlen(line_buf, 3) > 1) {
             switch (line_buf[0]) {
@@ -198,7 +218,10 @@ static void test_dir_list(void)
                     break;
                 }
                 default: {
-                    if (sscanf(line_buf, "%383s %u %u-%u-%u %u:%u %*s\n", fname_buf, &fsize, &year, &month, &day, &hour, &minute) == 7) {
+                    if (sscanf(
+                        line_buf,
+                        "%383s %u %u-%u-%u %u:%u %*s\n",
+                        fname_buf, &fsize, &year, &month, &day, &hour, &minute) == 7) {
                         /* file */
                         CU_ASSERT_FALSE_FATAL(ofsl_dir_iter_next(it));
 
@@ -238,12 +261,13 @@ static void test_dir_list(void)
                         /* unrecognized */
                         break;
                     }
-                    if (strncmp(fname_buf, ofsl_dir_iter_get_name(it), strnlen(fname_buf, sizeof(fname_buf))) == 0) {
+                    const char iter_fname = ofsl_dir_iter_get_name(it);
+                    if (strncmp(fname_buf, iter_fname, strnlen(fname_buf, sizeof(fname_buf))) == 0) {
                         CU_PASS("File name matched.");
                     } else {
                         int matched = 0;
                         for (int i = 0; i < 16 && alt_fnames[i]; i++) {
-                            if (strncmp(alt_fnames[i], ofsl_dir_iter_get_name(it), strnlen(alt_fnames[i], sizeof(fname_buf))) == 0) {
+                            if (strncmp(alt_fnames[i], iter_fname, strnlen(alt_fnames[i], sizeof(fname_buf))) == 0) {
                                 CU_PASS("File name matched.");
                                 matched = 1;
                             }
@@ -282,100 +306,103 @@ static void test_file_read(void)
     char md5str_buf[2][33];
     char* alt_fnames[16] = { NULL, };
     unsigned int fsize;
-    
+
     while (fgets(line_buf, sizeof(line_buf), imgtree)) {
         if (strnlen(line_buf, 3) > 1) {
             switch (line_buf[0]) {
-                case '#':
-                    break;
-                case '$':
-                    if (sscanf(line_buf, "$ %383s\n", fname_buf) == 1) {
-                        if (subdir) {
-                            ofsl_dir_close(subdir);
-                        }
-                        subdir = ofsl_dir_open(rootdir, fname_buf);
-                        CU_ASSERT_PTR_NOT_NULL_FATAL(subdir);
+            case '#':
+                break;
+            case '$':
+                if (sscanf(line_buf, "$ %383s\n", fname_buf) == 1) {
+                    if (subdir) {
+                        ofsl_dir_close(subdir);
                     }
-                    break;
-                case '+': {
-                    if (sscanf(line_buf, "+%383s\n", fname_buf) == 1) {
-                        for (int i = 0; i < 16; i++) {
-                            if (!alt_fnames[i]) {
-                                size_t len = strnlen(fname_buf, sizeof(fname_buf));
-                                alt_fnames[i] = malloc(len);
-                                strncpy(alt_fnames[i], fname_buf, len);
-                                if (i < 15) {
-                                    alt_fnames[i + 1] = NULL;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    break;
+                    subdir = ofsl_dir_open(rootdir, fname_buf);
+                    CU_ASSERT_PTR_NOT_NULL_FATAL(subdir);
                 }
-                default:
-                    if (sscanf(line_buf, "%383s %u %*u-%*u-%*u %*u:%*u %s\n", fname_buf, &fsize, md5str_buf[0]) == 3) {
-                        /* file */
-                        uint8_t* file_data = malloc(fsize);
-                        OFSL_File* file = ofsl_file_open(subdir ? subdir : rootdir, fname_buf, "r");
-                        for (int i = 0; i < 16 && alt_fnames[i]; i++) {
-                            if (!file) {
-                                file = ofsl_file_open(subdir ? subdir : rootdir, alt_fnames[i], "r");
+                break;
+            case '+': {
+                if (sscanf(line_buf, "+%383s\n", fname_buf) == 1) {
+                    for (int i = 0; i < 16; i++) {
+                        if (!alt_fnames[i]) {
+                            size_t len = strnlen(fname_buf, sizeof(fname_buf));
+                            alt_fnames[i] = malloc(len);
+                            strncpy(alt_fnames[i], fname_buf, len);
+                            if (i < 15) {
+                                alt_fnames[i + 1] = NULL;
                             }
-                            alt_fnames[i] = NULL;
-                            free(alt_fnames[i]);
+                            break;
                         }
-                        CU_ASSERT_PTR_NOT_NULL_FATAL(file);
-
-                        CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, fsize, 1), 1);
-
-                        /* check with MD5 algorithm */
-                        MD5Context md5ctx;
-                        md5Init(&md5ctx);
-                        md5Update(&md5ctx, file_data, fsize);
-                        md5Finalize(&md5ctx);
-
-                        int correct_bytes = 0;
-                        for (int i = 0; i < 16; i++) {
-                            uint8_t upper = (md5ctx.digest[i] & 0xF0) >> 4;
-                            uint8_t lower = md5ctx.digest[i] & 0x0F;
-                            md5str_buf[1][i << 1] = upper < 10 ? upper + '0' : upper + 'a' - 10;
-                            md5str_buf[1][(i << 1) + 1] = lower < 10 ? lower + '0' : lower + 'a' - 10;
-                        }
-                        md5str_buf[0][32] = 0;
-                        md5str_buf[1][32] = 0;
-                        CU_ASSERT_STRING_EQUAL(md5str_buf[0], md5str_buf[1]);
-
-                        CU_ASSERT_FALSE(ofsl_file_seek(file, 0, SEEK_SET));
-                        CU_ASSERT_EQUAL(ofsl_file_tell(file), 0);
-
-                        CU_ASSERT_FALSE(ofsl_file_seek(file, 10, SEEK_CUR));
-                        CU_ASSERT_EQUAL(ofsl_file_tell(file), 10);
-
-                        CU_ASSERT_FALSE(ofsl_file_seek(file, 0, SEEK_END));
-                        CU_ASSERT_EQUAL(ofsl_file_tell(file), fsize);
-                        CU_ASSERT_TRUE(ofsl_file_iseof(file));
-
-                        /* invalid seeks */
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, 1, SEEK_CUR));
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, -2048, SEEK_CUR));
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, 1, SEEK_END));
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, -2048, SEEK_END));
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, -1, SEEK_SET));
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, 2048, SEEK_SET));
-                        CU_ASSERT_TRUE(ofsl_file_seek(file, 0, 4));
-
-                        /* read file in invalid location */
-                        CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, 1, 1), -1);
-
-                        /* partial success */
-                        CU_ASSERT_FALSE(ofsl_file_seek(file, -1, SEEK_CUR));
-                        CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, 1, 2), 1);
-
-                        ofsl_file_close(file);
-                        free(file_data);
                     }
-                    break;
+                }
+                break;
+            }
+            default:
+                if (sscanf(
+                    line_buf,
+                    "%383s %u %*u-%*u-%*u %*u:%*u %s\n",
+                    fname_buf, &fsize, md5str_buf[0]) == 3) {
+                    /* file */
+                    uint8_t* file_data = malloc(fsize);
+                    OFSL_File* file = ofsl_file_open(subdir ? subdir : rootdir, fname_buf, "r");
+                    for (int i = 0; i < 16 && alt_fnames[i]; i++) {
+                        if (!file) {
+                            file = ofsl_file_open(subdir ? subdir : rootdir, alt_fnames[i], "r");
+                        }
+                        alt_fnames[i] = NULL;
+                        free(alt_fnames[i]);
+                    }
+                    CU_ASSERT_PTR_NOT_NULL_FATAL(file);
+
+                    CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, fsize, 1), 1);
+
+                    /* check with MD5 algorithm */
+                    MD5Context md5ctx;
+                    md5Init(&md5ctx);
+                    md5Update(&md5ctx, file_data, fsize);
+                    md5Finalize(&md5ctx);
+
+                    int correct_bytes = 0;
+                    for (int i = 0; i < 16; i++) {
+                        uint8_t upper = (md5ctx.digest[i] & 0xF0) >> 4;
+                        uint8_t lower = md5ctx.digest[i] & 0x0F;
+                        md5str_buf[1][i << 1]       = (upper < 10) ? (upper + '0') : (upper + 'a' - 10);
+                        md5str_buf[1][(i << 1) + 1] = (lower < 10) ? (lower + '0') : (lower + 'a' - 10);
+                    }
+                    md5str_buf[0][32] = 0;
+                    md5str_buf[1][32] = 0;
+                    CU_ASSERT_STRING_EQUAL(md5str_buf[0], md5str_buf[1]);
+
+                    CU_ASSERT_FALSE(ofsl_file_seek(file, 0, SEEK_SET));
+                    CU_ASSERT_EQUAL(ofsl_file_tell(file), 0);
+
+                    CU_ASSERT_FALSE(ofsl_file_seek(file, 10, SEEK_CUR));
+                    CU_ASSERT_EQUAL(ofsl_file_tell(file), 10);
+
+                    CU_ASSERT_FALSE(ofsl_file_seek(file, 0, SEEK_END));
+                    CU_ASSERT_EQUAL(ofsl_file_tell(file), fsize);
+                    CU_ASSERT_TRUE(ofsl_file_iseof(file));
+
+                    /* invalid seeks */
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, 1, SEEK_CUR));
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, -2048, SEEK_CUR));
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, 1, SEEK_END));
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, -2048, SEEK_END));
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, -1, SEEK_SET));
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, 2048, SEEK_SET));
+                    CU_ASSERT_TRUE(ofsl_file_seek(file, 0, 4));
+
+                    /* read file in invalid location */
+                    CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, 1, 1), -1);
+
+                    /* partial success */
+                    CU_ASSERT_FALSE(ofsl_file_seek(file, -1, SEEK_CUR));
+                    CU_ASSERT_EQUAL(ofsl_file_read(file, file_data, 1, 2), 1);
+
+                    ofsl_file_close(file);
+                    free(file_data);
+                }
+                break;
             }
         }
     }
@@ -406,64 +433,68 @@ int main(int argc, char** argv)
 
     static CU_TestInfo tests[] = {
         {
-            .pName = "mount",
-            .pTestFunc = test_mount
+            .pName      = "mount",
+            .pTestFunc  = test_mount
+            },
+        {
+            .pName      = "directory list",
+            .pTestFunc  = test_dir_list
         },
         {
-            .pName = "directory list",
-            .pTestFunc = test_dir_list
+            .pName      = "volume string",
+            .pTestFunc  = test_vol_str
         },
         {
-            .pName = "invalid file or directory",
-            .pTestFunc = test_no_such_entry,
+            .pName      = "invalid file or directory",
+            .pTestFunc  =     test_no_such_entry,
         },
         {
-            .pName = "file read",
-            .pTestFunc = test_file_read,
+            .pName      = "file read",
+            .pTestFunc  = test_file_read,
         },
         {
-            .pName = "unmount",
-            .pTestFunc = test_unmount
+            .pName      = "unmount",
+            .pTestFunc  = test_unmount
         },
         CU_TEST_INFO_NULL
     };
 
     static CU_SuiteInfo suites[] = {
         {
-            .pName = "fs/fat/fat12",
-            .pInitFunc = init_fat12_suite,
-            .pCleanupFunc = clean_test_suite,
-            .pTests = tests
+            .pName          = "fs/fat/fat12",
+            .pInitFunc      = init_fat12_suite,
+            .pCleanupFunc   = clean_test_suite,
+            .pTests         = tests
         },
         {
-            .pName = "fs/fat/fat12_cl",
-            .pInitFunc = init_fat12_cl_suite,
-            .pCleanupFunc = clean_test_suite,
-            .pTests = tests
+            .pName          = "fs/fat/fat12_cl",
+            .pInitFunc      = init_fat12_cl_suite,
+            .pCleanupFunc   = clean_test_suite,
+            .pTests         = tests
         },
         {
-            .pName = "fs/fat/fat12_clu",
-            .pInitFunc = init_fat12_clu_suite,
-            .pCleanupFunc = clean_test_suite,
-            .pTests = tests
+            .pName          = "fs/fat/fat12_clu",
+            .pInitFunc      = init_fat12_clu_suite,
+            .pCleanupFunc   = clean_test_suite,
+            .pTests         = tests
+        },
+        { 
+            .pName          = "fs/fat/fat12_csl",
+            .pInitFunc      = init_fat12_csl_suite,
+            .pCleanupFunc   = clean_test_suite,
+            .pTests         = tests
         },
         {
-            .pName = "fs/fat/fat12_csl",
-            .pInitFunc = init_fat12_csl_suite,
-            .pCleanupFunc = clean_test_suite,
-            .pTests = tests
+            .pName          = "fs/fat/fat16",
+            .pInitFunc      = init_fat16_suite,
+            .pCleanupFunc   = clean_test_suite,
+            .pTests         = tests
         },
         {
-            .pName = "fs/fat/fat16",
-            .pInitFunc = init_fat16_suite,
-            .pCleanupFunc = clean_test_suite,
-            .pTests = tests
-        },
-        {
-            .pName = "fs/fat/fat32",
-            .pInitFunc = init_fat32_suite,
-            .pCleanupFunc = clean_test_suite,
-            .pTests = tests
+            .pName          = "fs/fat/fat32",
+            .pInitFunc      = init_fat32_suite,
+            .pCleanupFunc   = clean_test_suite,
+            .pTests         = tests
         },
         CU_SUITE_INFO_NULL
     };

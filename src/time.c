@@ -72,7 +72,7 @@ void ofsl_time_calcdiff(OFSL_Time* fstm, const OFSL_TimeDelta* tdelta)
 {
     fstm->second += tdelta->dsecond;
 
-    // borrow
+    /* borrow */
     if (-tdelta->dnsec > fstm->nsec) {
         fstm->second -= 1;
         fstm->nsec += 1000000000;

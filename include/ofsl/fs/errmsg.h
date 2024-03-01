@@ -13,7 +13,7 @@ typedef enum {
     OFSL_FSE_ICLUSTER   = 3,
     OFSL_FSE_INVALFS    = 4,
     OFSL_FSE_IENTNAME   = 5,
-    OFSL_FSE_MAX        = 5,  // should be equal to last enum value
+    OFSL_FSE_MAX        = 5,  /* should be equal to last enum value */
 } OFSL_FileSystemError;
 
 #ifdef __cplusplus

@@ -2,6 +2,8 @@
 
 # this tool requires GNU Mtools, GNU coreutils, dd, and cat.
 
+set -e
+
 STAT_TYPE=$(test "$(stat -f .)" = "." && echo "unix" || echo "linux")
 
 generate_file() {
@@ -27,9 +29,9 @@ dd if=/dev/zero of=fat12.img bs=1048576 count=1
 dd if=/dev/zero of=fat16.img bs=1048576 count=16
 dd if=/dev/zero of=fat32.img bs=1048576 count=64
 
-mformat -i fat12.img -v "FAT Filesystem Test"
-mformat -i fat16.img -v "FAT Filesystem Test"
-mformat -F -i fat32.img -v "FAT Filesystem Test"
+mformat -i fat12.img -v "FAT Filesystem Test" -N 0123ABCD
+mformat -i fat16.img -v "FAT Filesystem Test" -N 0123ABCD
+mformat -F -i fat32.img -v "FAT Filesystem Test" -N 0123ABCD
 
 mcopy -i fat12.img -p -m -- file.bin ::
 mcopy -i fat12.img -p -m -- longfilename.bin ::

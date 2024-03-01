@@ -146,12 +146,12 @@ struct isofs_vol_desc {
             struct isofs_time_longfmt time_modified;
             struct isofs_time_longfmt time_expired_after;
             struct isofs_time_longfmt time_effective_after;
-            uint8_t descriptor_version;
+            uint8_t desc_ver;
 
             uint8_t __reserved4;
             uint8_t sys_data[512];
             uint8_t __reserved5[653];
-        } OFSL_PACKED primary_vol_desc;
+        } OFSL_PACKED pvd;
     } OFSL_PACKED;
 } OFSL_PACKED;
 

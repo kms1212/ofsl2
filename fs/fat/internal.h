@@ -16,11 +16,11 @@
 #define FAT_SFN_NAME            8
 #define FAT_SFN_EXTENSION       3
 #define FAT_SFN_LENGTH          (FAT_SFN_NAME + FAT_SFN_EXTENSION)
-#define FAT_SFN_BUFLEN          FAT_SFN_LENGTH + 2  // "filename" + '.' + "ext" + '\0'
+#define FAT_SFN_BUFLEN          FAT_SFN_LENGTH + 2  /* "filename" + '.' + "ext" + '\0' */
 
 #ifdef BUILD_FILESYSTEM_FAT_LFN
 #define FAT_LFN_LENGTH          255
-#define FAT_LFN_BUFLEN          FAT_LFN_LENGTH + 1  // "longfilename" + '\0'
+#define FAT_LFN_BUFLEN          FAT_LFN_LENGTH + 1  /* "longfilename" + '\0' */
 #define FAT_LFN_U8_BUFLEN       384
 #define FAT_FILENAME_BUF_LEN    FAT_LFN_U8_BUFLEN
 
@@ -138,33 +138,36 @@ struct fat_fsinfo {
     uint16_t        signature3;
 } OFSL_PACKED;
 
-union fat_dir_entry {
-    struct fat_direntry_file {
-        uint8_t         name[FAT_SFN_NAME];
-        uint8_t         extension[FAT_SFN_EXTENSION];
-        uint8_t         attribute;
-        uint8_t         __reserved;
-        uint8_t         created_tenth;
-        union fat_time  created_time;
-        union fat_date  created_date;
-        union fat_date  accessed_date;
-        uint16_t        cluster_location_high;
-        union fat_time  modified_time;
-        union fat_date  modified_date;
-        uint16_t        cluster_location;
-        uint32_t        size;
-    } OFSL_PACKED file;
+struct fat_direntry_file {
+    uint8_t         name[FAT_SFN_NAME];
+    uint8_t         extension[FAT_SFN_EXTENSION];
+    uint8_t         attribute;
+    uint8_t         __reserved;
+    uint8_t         created_tenth;
+    union fat_time  created_time;
+    union fat_date  created_date;
+    union fat_date  accessed_date;
+    uint16_t        cluster_location_high;
+    union fat_time  modified_time;
+    union fat_date  modified_date;
+    uint16_t        cluster_location;
+    uint32_t        size;
+} OFSL_PACKED;
 
-    struct fat_direntry_lfn {
-        uint8_t         sequence_index;
-        uint16_t        name_fragment1[5];
-        uint8_t         attribute;
-        uint8_t         __reserved;
-        uint8_t         checksum;
-        uint16_t        name_fragment2[6];
-        uint16_t        cluster_location;
-        uint16_t        name_fragment3[2];
-    } OFSL_PACKED lfn;
+struct fat_direntry_lfn {
+    uint8_t         sequence_index;
+    uint16_t        name_fragment1[5];
+    uint8_t         attribute;
+    uint8_t         __reserved;
+    uint8_t         checksum;
+    uint16_t        name_fragment2[6];
+    uint16_t        cluster_location;
+    uint16_t        name_fragment3[2];
+} OFSL_PACKED;
+
+union fat_dir_entry {
+    struct fat_direntry_lfn lfn;
+    struct fat_direntry_file file;
 } OFSL_PACKED;
 
 typedef uint32_t fatcluster_t;

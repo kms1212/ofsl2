@@ -7,7 +7,7 @@
 
 #include <string>
 
-#if __cplusplus < 201703L  // std::iterator is deprecated in C++17
+#if __cplusplus < 201703L  /* std::iterator is deprecated in C++17 */
 #include <iterator>
 #endif
 
@@ -40,7 +40,7 @@ public:
 };
 
 class directory_iterator
-#if __cplusplus < 201703L  // Before C++17, inherit std::iterator
+#if __cplusplus < 201703L  /* Before C++17, inherit std::iterator */
 : public std::iterator<std::input_iterator_tag, FileAttribute>
 #endif
 {
@@ -80,7 +80,7 @@ public:
 
     static directory_iterator& end(void);
 
-#if __cplusplus >= 201703L  // After C++17, implement iterator traits
+#if __cplusplus >= 201703L  /* After C++17, implement iterator traits */
     using value_type = FileInfo;
     using difference_type = long;
     using pointer = const FileInfo*;
