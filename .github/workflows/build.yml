@@ -57,26 +57,26 @@ jobs:
 
     - name: Configure CMake
       run: >
-        cmake
-          -B ${{ steps.strings.outputs.build-output-dir }}
-          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          -DBUILD_TESTING=TRUE
-          -DBUILD_CXX_WRAPPER=FALSE
+        cmake \
+          -B ${{ steps.strings.outputs.build-output-dir }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DBUILD_TESTING=TRUE \
+          -DBUILD_CXX_WRAPPER=FALSE \
           -S ${{ github.workspace }}
 
     - name: Build
       run: >
-        cmake
-          --build ${{ steps.strings.outputs.build-output-dir }}
-          --config ${{ matrix.build_type }}
+        cmake \
+          --build ${{ steps.strings.outputs.build-output-dir }} \
+          --config ${{ matrix.build_type }} \
           --parallel 4
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: >
-        ctest
-          --test-dir ${{ steps.strings.outputs.build-output-dir }}/tests
-          --output-on-failure
+        ctest \
+          --test-dir ${{ steps.strings.outputs.build-output-dir }}/tests \
+          --output-on-failure \
           --build-config ${{ matrix.build_type }}
